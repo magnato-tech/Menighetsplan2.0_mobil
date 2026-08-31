@@ -23,6 +23,58 @@ export function formatNorwegianDateTime(isoString: string): string {
   }
 }
 
+// Compact line format as requested (e.g., "søndag 16. august 2026 · 11:00 · Gitmark · Gudstjeneste")
+export function formatCompactGatheringSubtitle(
+  isoString: string,
+  location?: string,
+  typeOrGroup?: string
+): string {
+  try {
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return isoString;
+
+    const days = ["søndag", "mandag", "tirsdag", "onsdag", "torsdag", "fredag", "lørdag"];
+    const months = [
+      "januar",
+      "februar",
+      "mars",
+      "april",
+      "mai",
+      "juni",
+      "juli",
+      "august",
+      "september",
+      "oktober",
+      "november",
+      "desember",
+    ];
+
+    const dayName = days[date.getDay()];
+    const dayNum = date.getDate();
+    const monthName = months[date.getMonth()];
+    const year = date.getFullYear();
+    const hours = date.getHours().toString().padStart(2, "0");
+    const minutes = date.getMinutes().toString().padStart(2, "0");
+
+    const parts: string[] = [
+      `${dayName} ${dayNum}. ${monthName} ${year}`,
+      `${hours}:${minutes}`,
+    ];
+
+    if (location) {
+      parts.push(location);
+    }
+
+    if (typeOrGroup) {
+      parts.push(typeOrGroup);
+    }
+
+    return parts.join(" · ");
+  } catch {
+    return isoString;
+  }
+}
+
 // 1. Hook: useCurrentUser
 export function useCurrentUser() {
   const { currentUser, allPersons, currentUserId, setCurrentUserId, getUserGroups } = useMockData();

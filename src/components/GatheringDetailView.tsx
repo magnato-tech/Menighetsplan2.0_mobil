@@ -926,30 +926,30 @@ export const GatheringDetailView: React.FC<GatheringDetailViewProps> = ({
                                 }
                               }}
                               disabled={!assignment || !canIntervene}
-                              className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg border transition-all ${
+                              className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border transition-all ${
                                 response === "confirmed"
-                                  ? "bg-emerald-50 text-emerald-900 border-emerald-200 hover:bg-emerald-100/70"
+                                  ? "bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100/80"
                                   : response === "withdrawn"
-                                  ? "bg-red-50 text-red-900 border-red-200 hover:bg-red-100/70"
+                                  ? "bg-red-50 text-red-900 border-red-300 hover:bg-red-100/80"
                                   : response === "declined"
-                                  ? "bg-slate-100 text-slate-700 border-slate-200 line-through"
-                                  : "bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100/70"
+                                  ? "bg-slate-100 text-slate-700 border-slate-300 line-through"
+                                  : "bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100/80"
                               } ${assignment && canIntervene ? "cursor-pointer" : "cursor-default"}`}
                             >
                               <span>{person?.name || "Ukjent person"}</span>
-                              <span
-                                className={`text-[9px] font-bold px-1 py-0.2 rounded-full ${
-                                  response === "confirmed"
-                                    ? "bg-emerald-200/80 text-emerald-800"
-                                    : response === "withdrawn"
-                                    ? "bg-red-200 text-red-800"
-                                    : response === "declined"
-                                    ? "bg-slate-200 text-slate-600"
-                                    : "bg-amber-200 text-amber-800"
-                                }`}
-                              >
-                                {statusLabel}
-                              </span>
+                              {response !== "confirmed" && (
+                                <span
+                                  className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                                    response === "withdrawn"
+                                      ? "bg-red-200 text-red-800"
+                                      : response === "declined"
+                                      ? "bg-slate-200 text-slate-700"
+                                      : "bg-amber-200 text-amber-900"
+                                  }`}
+                                >
+                                  {response === "withdrawn" ? "Forfall" : response === "declined" ? "Avslått" : "Forespurt"}
+                                </span>
+                              )}
                               {assignment && canIntervene && (
                                 <ChevronDown className="w-3 h-3 text-slate-400 group-hover:text-slate-600 print:hidden" />
                               )}

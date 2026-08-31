@@ -984,14 +984,18 @@ export const LeaderGroupDetailPage: React.FC = () => {
                                         key={assignment.id}
                                         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium ${
                                           response === "confirmed"
-                                            ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                                            ? "bg-emerald-50 text-emerald-800 border border-emerald-300 font-semibold"
                                             : response === "withdrawn"
-                                            ? "bg-red-50 text-red-800 border border-red-200 line-through"
-                                            : "bg-amber-50 text-amber-800 border border-amber-200"
+                                            ? "bg-red-50 text-red-800 border border-red-300"
+                                            : "bg-amber-50 text-amber-800 border border-amber-300"
                                         }`}
                                       >
                                         <span>{person?.name || "Ukjent"}</span>
-                                        <span className="text-[9px] opacity-75">({statusLabel})</span>
+                                        {response !== "confirmed" && (
+                                          <span className="text-[9px] font-bold opacity-90">
+                                            ({response === "withdrawn" ? "Forfall" : response === "declined" ? "Avslått" : "Forespurt"})
+                                          </span>
+                                        )}
                                       </span>
                                     ))
                                   ) : (

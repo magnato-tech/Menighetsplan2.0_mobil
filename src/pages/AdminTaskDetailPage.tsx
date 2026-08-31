@@ -369,19 +369,21 @@ export const AdminTaskDetailPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
-                        response === "confirmed"
-                          ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                          : response === "withdrawn"
-                          ? "bg-red-100 text-red-700 border border-red-200"
-                          : response === "declined"
-                          ? "bg-slate-200 text-slate-700"
-                          : "bg-amber-100 text-amber-800 border border-amber-200"
-                      }`}
-                    >
-                      {statusLabel}
-                    </span>
+                    {response !== "confirmed" ? (
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                          response === "withdrawn"
+                            ? "bg-red-100 text-red-700 border border-red-200"
+                            : response === "declined"
+                            ? "bg-slate-200 text-slate-700"
+                            : "bg-amber-100 text-amber-800 border border-amber-200"
+                        }`}
+                      >
+                        {response === "withdrawn" ? "Forfall" : response === "declined" ? "Avslått" : "Forespurt"}
+                      </span>
+                    ) : (
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0 self-center" title="Akseptert" />
+                    )}
                   </div>
                 ))}
               </div>
