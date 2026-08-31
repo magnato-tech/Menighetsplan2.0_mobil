@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   useAdminDashboard,
   useModuleConfig,
@@ -46,8 +46,27 @@ export const AdminPage: React.FC = () => {
   } = useAdminDashboard();
 
   const { kalender, meldinger, toggleKalender, toggleMeldinger } = useModuleConfig();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [activeTab, setActiveTab] = useState<"grupper" | "personer" | "samlinger" | "oppgaver" | "innstillinger">("grupper");
+  const validTabs = ["grupper", "personer", "samlinger", "oppgaver", "innstillinger"] as const;
+  type AdminTab = typeof validTabs[number];
+
+  const initialTab = (searchParams.get("tab") as AdminTab) || "grupper";
+  const [activeTab, setActiveTab] = useState<AdminTab>(
+    validTabs.includes(initialTab) ? initialTab : "grupper"
+  );
+
+  useEffect(() => {
+    const tabParam = searchParams.get("tab") as AdminTab;
+    if (tabParam && validTabs.includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (tab: AdminTab) => {
+    setActiveTab(tab);
+    setSearchParams({ tab });
+  };
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [editNameInput, setEditNameInput] = useState<string>("");
   const [feedback, setFeedback] = useState<{ text: string; type: "success" | "error" } | null>(null);
@@ -187,7 +206,7 @@ export const AdminPage: React.FC = () => {
           <button
             type="button"
             id="tab-grupper"
-            onClick={() => setActiveTab("grupper")}
+            onClick={() => handleTabChange("grupper")}
             className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-1 ${
               activeTab === "grupper"
                 ? "bg-white text-slate-800 shadow-xs"
@@ -200,7 +219,7 @@ export const AdminPage: React.FC = () => {
           <button
             type="button"
             id="tab-personer"
-            onClick={() => setActiveTab("personer")}
+            onClick={() => handleTabChange("personer")}
             className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-1 ${
               activeTab === "personer"
                 ? "bg-white text-slate-800 shadow-xs"
@@ -213,7 +232,7 @@ export const AdminPage: React.FC = () => {
           <button
             type="button"
             id="tab-samlinger"
-            onClick={() => setActiveTab("samlinger")}
+            onClick={() => handleTabChange("samlinger")}
             className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-1 ${
               activeTab === "samlinger"
                 ? "bg-white text-slate-800 shadow-xs"
@@ -226,7 +245,7 @@ export const AdminPage: React.FC = () => {
           <button
             type="button"
             id="tab-oppgaver"
-            onClick={() => setActiveTab("oppgaver")}
+            onClick={() => handleTabChange("oppgaver")}
             className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-1 ${
               activeTab === "oppgaver"
                 ? "bg-white text-slate-800 shadow-xs"
@@ -239,7 +258,7 @@ export const AdminPage: React.FC = () => {
           <button
             type="button"
             id="tab-innstillinger"
-            onClick={() => setActiveTab("innstillinger")}
+            onClick={() => handleTabChange("innstillinger")}
             className={`py-1.5 px-2.5 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-1 ${
               activeTab === "innstillinger"
                 ? "bg-white text-slate-800 shadow-xs"

@@ -57,6 +57,8 @@ export interface MockDataContextType {
   updatePerson: (personId: string, updates: Partial<Person>) => { success: boolean; error?: string };
   addGroupMember: (groupId: string, personId: string) => { success: boolean; error?: string };
   removeGroupMember: (groupId: string, personId: string) => { success: boolean; error?: string };
+  createTask: (data: { gatheringId: string; groupId: string; title: string; description?: string; instruction?: string; neededCount?: number }) => { success: boolean; task?: Task; error?: string };
+  deleteTask: (taskId: string) => { success: boolean; error?: string };
   updateTask: (taskId: string, updates: Partial<Task>) => { success: boolean; error?: string };
   updateTaskInstruction: (taskId: string, instruction: string) => { success: boolean; error?: string };
   updateTaskNeededCount: (taskId: string, neededCount: number | undefined) => { success: boolean; error?: string };
@@ -195,10 +197,14 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
 
       if (!isPersonInGroup(personId, task.groupId)) {
-        return {
-          success: false,
-          error: "Personen er ikke medlem i gruppen som har oppgaven.",
-        };
+        // Auto-add person to the group membership so assignment succeeds smoothly
+        setGroups((prev) =>
+          prev.map((g) =>
+            g.id === task.groupId && !g.memberIds.includes(personId)
+              ? { ...g, memberIds: [...g.memberIds, personId] }
+              : g
+          )
+        );
       }
 
       // Upsert assignment for this (taskId, personId)
@@ -508,12 +514,62 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               ...t,
               ...updates,
               title: updates.title !== undefined ? updates.title.trim() : t.title,
+              description: updates.description !== undefined ? updates.description.trim() : t.description,
               instruction: updates.instruction !== undefined ? updates.instruction.trim() : t.instruction,
+              groupId: updates.groupId !== undefined ? updates.groupId : t.groupId,
+              neededCount: updates.neededCount !== undefined ? updates.neededCount : t.neededCount,
             };
           }
           return t;
         })
       );
+      return { success: true };
+    },
+    []
+  );
+
+  // Admin Action: Create Task
+  const createTask = useCallback(
+    (data: {
+      gatheringId: string;
+      groupId: string;
+      title: string;
+      description?: string;
+      instruction?: string;
+      neededCount?: number;
+    }): { success: boolean; task?: Task; error?: string } => {
+      if (!data.title.trim()) {
+        return { success: false, error: "Tittel kan ikke være tom." };
+      }
+      if (!data.gatheringId) {
+        return { success: false, error: "Samling må spesifiseres." };
+      }
+      if (!data.groupId) {
+        return { success: false, error: "Gruppe må spesifiseres." };
+      }
+
+      const newTask: Task = {
+        id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        gatheringId: data.gatheringId,
+        groupId: data.groupId,
+        title: data.title.trim(),
+        description: data.description?.trim() || undefined,
+        instruction: data.instruction?.trim() || undefined,
+        status: "open",
+        neededCount: data.neededCount || 1,
+      };
+
+      setTasks((prev) => [...prev, newTask]);
+      return { success: true, task: newTask };
+    },
+    []
+  );
+
+  // Admin Action: Delete Task
+  const deleteTask = useCallback(
+    (taskId: string): { success: boolean; error?: string } => {
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      setAssignments((prev) => prev.filter((a) => a.taskId !== taskId));
       return { success: true };
     },
     []
@@ -603,6 +659,8 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       addGroupMember,
       removeGroupMember,
       updateTask,
+      createTask,
+      deleteTask,
       updateTaskInstruction,
       updateTaskNeededCount,
       sendGroupMessage,
@@ -643,6 +701,8 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       addGroupMember,
       removeGroupMember,
       updateTask,
+      createTask,
+      deleteTask,
       updateTaskInstruction,
       updateTaskNeededCount,
       sendGroupMessage,

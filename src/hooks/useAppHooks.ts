@@ -402,36 +402,43 @@ export function useLeaderDashboard() {
     });
   }, [leaderGroups, gatherings, tasks, allPersons]);
 
-  // All semester gatherings across leader's groups
+  // All semester gatherings across leader's groups (consolidated)
   const allSemesterGatherings = useMemo(() => {
-    const list: LeaderGatheringItem[] = [];
-    const seenIds = new Set<string>();
+    const leaderGroupIds = new Set(leaderGroups.map((g) => g.id));
+    const leaderTasks = tasks.filter((t) => leaderGroupIds.has(t.groupId));
 
-    leaderData.forEach((gd) => {
-      gd.gatherings.forEach((gi) => {
-        if (!seenIds.has(gi.gathering.id)) {
-          seenIds.add(gi.gathering.id);
-          list.push(gi);
-        }
-      });
+    const relevantGatheringIds = new Set([
+      ...gatherings.filter((g) => leaderGroupIds.has(g.groupId)).map((g) => g.id),
+      ...leaderTasks.map((t) => t.gatheringId),
+    ]);
+
+    const relevantGatherings = gatherings
+      .filter((g) => relevantGatheringIds.has(g.id))
+      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+
+    return relevantGatherings.map((gathering) => {
+      const tasksForGathering = leaderTasks.filter((t) => t.gatheringId === gathering.id);
+      const group = groups.find((g) => g.id === gathering.groupId) || leaderGroups[0];
+      const staffing = getStaffingStatus(tasksForGathering);
+      return {
+        gathering,
+        group,
+        tasks: tasksForGathering,
+        staffing,
+      };
     });
+  }, [leaderGroups, gatherings, tasks, groups]);
 
-    return list.sort(
-      (a, b) => new Date(a.gathering.startsAt).getTime() - new Date(b.gathering.startsAt).getTime()
-    );
-  }, [leaderData]);
+  // Urgent tasks across leader's groups
+  const urgentTasks = useMemo(() => {
+    const leaderGroupIds = new Set(leaderGroups.map((g) => g.id));
+    return tasks.filter((t) => leaderGroupIds.has(t.groupId) && t.status === "vacant");
+  }, [leaderGroups, tasks]);
 
+  // Urgent gatherings across leader's groups (all semester gatherings where staffing is red)
   const urgentGatherings = useMemo(() => {
-    const list: LeaderGatheringItem[] = [];
-    for (const gd of leaderData) {
-      for (const gi of gd.gatherings) {
-        if (gi.staffing.color === "red") {
-          list.push(gi);
-        }
-      }
-    }
-    return list;
-  }, [leaderData]);
+    return allSemesterGatherings.filter((item) => item.staffing.color === "red");
+  }, [allSemesterGatherings]);
 
   return {
     isLeader,
@@ -439,6 +446,9 @@ export function useLeaderDashboard() {
     leaderData,
     allSemesterGatherings,
     urgentGatherings,
+    urgentTasks,
+    urgentTasksCount: urgentTasks.length,
+    urgentGatheringsCount: urgentGatherings.length,
     currentUser,
     assignTaskToPerson,
   };
@@ -659,9 +669,16 @@ export function useAdminGatheringDetail(gatheringId: string) {
     getGatheringById,
     getGroupById,
     getPersonById,
+    assignTaskToPerson,
+    updateAssignmentStatus,
+    removeAssignment,
+    updateTaskStatus,
+    reportAbsence,
     updateTaskNeededCount,
     updateTaskInstruction,
     updateTask,
+    createTask,
+    deleteTask,
   } = useMockData();
 
   const isAdmin = currentUser.globalRole === "admin";
@@ -735,10 +752,19 @@ export function useAdminGatheringDetail(gatheringId: string) {
     currentUser,
     gathering,
     group,
+    allGroups: groups,
+    allPersons,
     tasksWithDetails,
+    assignTaskToPerson,
+    updateAssignmentStatus,
+    removeAssignment,
+    updateTaskStatus,
+    reportAbsence,
     updateTaskNeededCount,
     updateTaskInstruction,
     updateTask,
+    createTask,
+    deleteTask,
   };
 }
 
@@ -1160,6 +1186,8 @@ export function useLeaderGatheringDetail(gatheringId: string) {
     updateTaskNeededCount,
     updateTaskInstruction,
     updateTask,
+    createTask,
+    deleteTask,
   } = useMockData();
 
   const gathering = useMemo(() => {
@@ -1307,6 +1335,9 @@ export function useLeaderGatheringDetail(gatheringId: string) {
     updateTaskNeededCount,
     updateTaskInstruction,
     updateTask,
+    createTask,
+    deleteTask,
+    allGroups: groups,
   };
 }
 

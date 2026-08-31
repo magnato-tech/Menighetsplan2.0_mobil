@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import React, { useState, useMemo, useEffect } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   useLeaderDashboard,
   formatNorwegianDateTime,
@@ -236,12 +236,28 @@ export const LeaderPage: React.FC = () => {
     leaderData,
     allSemesterGatherings,
     urgentGatherings,
+    urgentTasks,
+    urgentTasksCount,
     currentUser,
     assignTaskToPerson,
   } = useLeaderDashboard();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [activeTab, setActiveTab] = useState<"grupper" | "samlinger">("grupper");
+  const initialTab = searchParams.get("tab") === "samlinger" ? "samlinger" : "grupper";
+  const [activeTab, setActiveTab] = useState<"grupper" | "samlinger">(initialTab);
+
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    if (tabParam === "samlinger" || tabParam === "grupper") {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (tab: "grupper" | "samlinger") => {
+    setActiveTab(tab);
+    setSearchParams({ tab });
+  };
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<"all" | "red" | "yellow" | "green">("all");
   const [feedback, setFeedback] = useState<{ text: string; type: "success" | "info" } | null>(null);
@@ -264,6 +280,13 @@ export const LeaderPage: React.FC = () => {
     showFeedback("Oppgaven er markert for personlig oppfølging av gruppeleder.", "info");
   };
 
+  // Shortcut from urgent banner: switch to Semesteroversikt, select 'red' status, and reset month to 'all'
+  const handleShowUrgentInSemester = () => {
+    handleTabChange("samlinger");
+    setSelectedStatusFilter("red");
+    setSelectedMonth("all");
+  };
+
   // Month filtering definitions (Aug 2026 – Jan 2027)
   const monthOptions = [
     { id: "all", label: "Alle måneder" },
@@ -275,23 +298,32 @@ export const LeaderPage: React.FC = () => {
     { id: "2027-01", label: "Jan 2027" },
   ];
 
-  // Filtered semester gatherings
-  const filteredSemesterGatherings = useMemo(() => {
-    return allSemesterGatherings.filter((item) => {
-      // Month match
-      if (selectedMonth !== "all") {
-        const itemMonth = item.gathering.startsAt.substring(0, 7); // "YYYY-MM"
-        if (itemMonth !== selectedMonth) return false;
-      }
+  // Gatherings in currently selected month (for dynamic filter badge counts)
+  const monthGatherings = useMemo(() => {
+    if (selectedMonth === "all") return allSemesterGatherings;
+    return allSemesterGatherings.filter((item) => item.gathering.startsAt.substring(0, 7) === selectedMonth);
+  }, [allSemesterGatherings, selectedMonth]);
 
-      // Status match
+  const monthRedCount = useMemo(() => monthGatherings.filter((item) => item.staffing.color === "red").length, [monthGatherings]);
+  const monthYellowCount = useMemo(() => monthGatherings.filter((item) => item.staffing.color === "yellow").length, [monthGatherings]);
+  const monthGreenCount = useMemo(() => monthGatherings.filter((item) => item.staffing.color === "green").length, [monthGatherings]);
+
+  // Filtered semester gatherings combining Month + Status
+  const filteredSemesterGatherings = useMemo(() => {
+    return monthGatherings.filter((item) => {
       if (selectedStatusFilter !== "all") {
         if (item.staffing.color !== selectedStatusFilter) return false;
       }
-
       return true;
     });
-  }, [allSemesterGatherings, selectedMonth, selectedStatusFilter]);
+  }, [monthGatherings, selectedStatusFilter]);
+
+  // Count urgent tasks inside the filtered gatherings
+  const filteredUrgentTasksCount = useMemo(() => {
+    return filteredSemesterGatherings.reduce((acc, item) => {
+      return acc + item.tasks.filter((t) => t.status === "vacant").length;
+    }, 0);
+  }, [filteredSemesterGatherings]);
 
   // Friendly message if user is not a leader or deputy in any group
   if (!isLeader) {
@@ -349,7 +381,7 @@ export const LeaderPage: React.FC = () => {
           <button
             type="button"
             id="tab-btn-mine-grupper"
-            onClick={() => setActiveTab("grupper")}
+            onClick={() => handleTabChange("grupper")}
             className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
               activeTab === "grupper"
                 ? "bg-white text-slate-900 shadow-xs"
@@ -363,7 +395,7 @@ export const LeaderPage: React.FC = () => {
           <button
             type="button"
             id="tab-btn-samlingsoversikt"
-            onClick={() => setActiveTab("samlinger")}
+            onClick={() => handleTabChange("samlinger")}
             className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
               activeTab === "samlinger"
                 ? "bg-white text-slate-900 shadow-xs"
@@ -395,62 +427,71 @@ export const LeaderPage: React.FC = () => {
       )}
 
       <div className="p-5 space-y-6">
-        {/* Executive Summary Card: Hva trenger oppfølging nå? */}
+        {/* Executive Summary: Rolig og kompakt statusindikator */}
         <section aria-labelledby="leader-summary-title">
           <h2 id="leader-summary-title" className="sr-only">
             Statusoppsummering for gruppeleder
           </h2>
 
-          {urgentGatherings.length > 0 ? (
-            <div className="p-4 bg-red-50 rounded-2xl border border-red-200 space-y-2 shadow-xs">
-              <div className="flex items-center gap-2">
-                <span className="p-1.5 bg-red-100 rounded-lg text-red-600">
-                  <ShieldAlert className="w-4 h-4" />
-                </span>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-red-800">
-                  Krever oppfølging nå
-                </h3>
+          {urgentTasksCount > 0 ? (
+            <div
+              id="leader-urgent-banner"
+              className="px-4 py-3 bg-red-50 rounded-2xl border border-red-200 flex items-center justify-between gap-3 shadow-xs"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />
+                <div>
+                  <span className="text-xs font-bold text-red-900 block leading-snug">
+                    {urgentTasksCount} {urgentTasksCount === 1 ? "oppgave trenger vikar / oppfølging" : "oppgaver trenger vikar / oppfølging"}
+                  </span>
+                  <span className="text-[11px] text-red-700 font-medium">
+                    I {urgentGatherings.length} {urgentGatherings.length === 1 ? "aktivitet" : "aktiviteter"} dette semesteret
+                  </span>
+                </div>
               </div>
-              <p className="text-xs text-slate-700 leading-relaxed font-medium">
-                Det er meldt forfall på {urgentGatherings.length}{" "}
-                {urgentGatherings.length === 1 ? "arrangement" : "arrangementer"} som trenger vikar. Du kan tildele vikar direkte fra arrangementsdetaljen eller semesteroversikten.
-              </p>
+              <button
+                type="button"
+                id="btn-show-urgent-in-semester"
+                onClick={handleShowUrgentInSemester}
+                className="text-xs font-bold px-3 py-1.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white rounded-xl shadow-xs transition-colors shrink-0 cursor-pointer whitespace-nowrap flex items-center gap-1"
+              >
+                <span>Vis i semesteroversikt</span>
+                <span>→</span>
+              </button>
             </div>
           ) : (
-            <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200/80 space-y-1.5 shadow-xs">
+            <div className="px-4 py-2.5 bg-emerald-50 rounded-xl border border-emerald-200/80 flex items-center justify-between gap-2 shadow-xs">
               <div className="flex items-center gap-2">
-                <span className="p-1.5 bg-emerald-100 rounded-lg text-emerald-700">
-                  <CheckCircle2 className="w-4 h-4" />
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                <span className="text-xs font-semibold text-emerald-900">
+                  Alt er i rute • Alle planlagte oppgaver er dekket
                 </span>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-900">
-                  Alt er i rute
-                </h3>
               </div>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Ingen ubesatte forfall i dine grupper for øyeblikket. Alle oppgaver er dekket for kommende arrangementer.
-              </p>
+              <span className="text-[11px] font-medium text-emerald-700">
+                🟢 Dekket
+              </span>
             </div>
           )}
         </section>
 
         {/* TAB 1: Mine Ledergrupper (Gruppekort overblikk) */}
         {activeTab === "grupper" && (
-          <section className="space-y-4" aria-labelledby="leader-groups-heading">
+          <section className="space-y-3.5" aria-labelledby="leader-groups-heading">
             <div className="flex items-center justify-between">
               <h3 id="leader-groups-heading" className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Grupper du administrerer
+                Mine grupper
               </h3>
               <span className="text-[11px] text-slate-400 font-medium">
                 Velg gruppe for å åpne gruppekortet
               </span>
             </div>
 
-            <div className="space-y-3.5">
+            <div className="space-y-3">
               {leaderData.map(({ group, members, gatherings, totalVacantTasks, totalOpenTasks }) => {
                 const isMainLeader = group.leaderIds.includes(currentUser.id);
                 const isDeputy = group.deputyLeaderIds?.includes(currentUser.id);
 
-                // Find next upcoming gathering/arrangement for this group
+                // Find next upcoming activity for this group
                 const nextGatheringItem = gatherings[0];
 
                 return (
@@ -459,10 +500,10 @@ export const LeaderPage: React.FC = () => {
                     id={`leader-group-card-${group.id}`}
                     className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-3 hover:border-emerald-300 transition-all group"
                   >
-                    {/* Header */}
+                    {/* Header: Gruppenavn, Kategori & Medlemmer */}
                     <div className="flex items-start justify-between gap-2">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <h4 className="text-sm font-bold text-slate-800 group-hover:text-emerald-800 transition-colors">
                             {group.name}
                           </h4>
@@ -475,25 +516,21 @@ export const LeaderPage: React.FC = () => {
                                 : "bg-indigo-100 text-indigo-800"
                             }`}
                           >
-                            {isMainLeader ? "Gruppeleder" : isDeputy ? "Nestleder" : "Admin"}
+                            {isMainLeader ? "Hovedleder" : isDeputy ? "Nestleder" : "Admin"}
                           </span>
                         </div>
                         <p className="text-xs text-slate-500">
-                          Kategori: <span className="font-semibold text-slate-700 capitalize">{group.category || "Tjenestegruppe"}</span>
+                          <span className="capitalize">{group.category || "Tjenestegruppe"}</span> · {members.length} medlemmer
                         </p>
                       </div>
-
-                      <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg">
-                        {members.length} {members.length === 1 ? "medlem" : "medlemmer"}
-                      </span>
                     </div>
 
-                    {/* Next Arrangement & Staffing Status */}
+                    {/* Neste relevante aktivitet & Bemanningsstatus */}
                     {nextGatheringItem ? (
                       <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1.5 text-xs">
                         <div className="flex items-center justify-between text-slate-500 font-medium">
                           <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400">
-                            Neste arrangement:
+                            Neste aktivitet:
                           </span>
                           <span
                             className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
@@ -504,7 +541,7 @@ export const LeaderPage: React.FC = () => {
                                 : "bg-emerald-100 text-emerald-800"
                             }`}
                           >
-                            {nextGatheringItem.staffing.badgeText}
+                            {nextGatheringItem.staffing.color === "green" ? "🟢 Dekket" : nextGatheringItem.staffing.badgeText}
                           </span>
                         </div>
                         <div className="font-bold text-slate-800">
@@ -517,36 +554,22 @@ export const LeaderPage: React.FC = () => {
                       </div>
                     ) : (
                       <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 text-xs text-slate-400 italic">
-                        Ingen planlagte arrangementer for denne gruppen.
+                        Ingen planlagte aktiviteter for denne gruppen.
                       </div>
                     )}
 
-                    {/* Meeting Schedule info */}
-                    <div className="flex items-center justify-between text-xs text-slate-600 px-1">
-                      <span className="flex items-center gap-1.5 font-medium">
-                        <Clock className="w-3.5 h-3.5 text-slate-400" />
-                        {group.meetingSchedule
-                          ? `${group.meetingSchedule.weekday} kl. ${group.meetingSchedule.time} (${group.meetingSchedule.frequency})`
-                          : "Møteplan ikke fastsatt"}
-                      </span>
-                    </div>
+                    {/* Fast møteplan */}
+                    {group.meetingSchedule && (
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500 px-0.5">
+                        <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span>Fast tid: {group.meetingSchedule.weekday} kl. {group.meetingSchedule.time} ({group.meetingSchedule.frequency})</span>
+                      </div>
+                    )}
 
-                    {/* Member preview chips */}
-                    <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                      {members.map((m) => (
-                        <span
-                          key={m.id}
-                          className="text-[11px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-medium"
-                        >
-                          {m.name.split(" ")[0]}
-                        </span>
-                      ))}
-                    </div>
-
-                    {/* Card Action Link */}
+                    {/* Action link */}
                     <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                       <span className="text-[11px] text-slate-400">
-                        {gatherings.length} planlagte arrangementer
+                        {gatherings.length} planlagte aktiviteter
                       </span>
                       <button
                         type="button"
@@ -598,64 +621,159 @@ export const LeaderPage: React.FC = () => {
               </div>
 
               {/* Status Filter Buttons */}
-              <div className="flex items-center gap-1.5 overflow-x-auto text-[11px]">
+              <div className="flex items-center gap-1.5 overflow-x-auto text-[11px] no-scrollbar">
                 <button
                   type="button"
                   id="filter-status-all"
                   onClick={() => setSelectedStatusFilter("all")}
-                  className={`px-2.5 py-1 rounded-lg font-semibold whitespace-nowrap cursor-pointer transition-colors ${
+                  className={`px-2.5 py-1.5 rounded-xl font-semibold whitespace-nowrap cursor-pointer transition-colors flex items-center gap-1.5 ${
                     selectedStatusFilter === "all"
-                      ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
-                      : "bg-white text-slate-500 border border-slate-200"
+                      ? "bg-emerald-100 text-emerald-900 border border-emerald-300 shadow-2xs font-bold"
+                      : "bg-white text-slate-600 border border-slate-200"
                   }`}
                 >
-                  Alle statuser
+                  <span>Alle statuser</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-600">
+                    {monthGatherings.length}
+                  </span>
                 </button>
                 <button
                   type="button"
                   id="filter-status-red"
                   onClick={() => setSelectedStatusFilter("red")}
-                  className={`px-2.5 py-1 rounded-lg font-semibold whitespace-nowrap cursor-pointer transition-colors flex items-center gap-1 ${
+                  className={`px-2.5 py-1.5 rounded-xl font-semibold whitespace-nowrap cursor-pointer transition-colors flex items-center gap-1.5 ${
                     selectedStatusFilter === "red"
-                      ? "bg-red-100 text-red-900 border border-red-300"
+                      ? "bg-red-100 text-red-900 border border-red-300 shadow-2xs font-bold"
                       : "bg-white text-red-600 border border-slate-200"
                   }`}
                 >
                   <span className="w-2 h-2 rounded-full bg-red-500" />
                   <span>Trenger vikar / Forfall</span>
+                  {monthRedCount > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-red-200/80 text-red-900 font-bold">
+                      {monthRedCount}
+                    </span>
+                  )}
                 </button>
                 <button
                   type="button"
                   id="filter-status-yellow"
                   onClick={() => setSelectedStatusFilter("yellow")}
-                  className={`px-2.5 py-1 rounded-lg font-semibold whitespace-nowrap cursor-pointer transition-colors flex items-center gap-1 ${
+                  className={`px-2.5 py-1.5 rounded-xl font-semibold whitespace-nowrap cursor-pointer transition-colors flex items-center gap-1.5 ${
                     selectedStatusFilter === "yellow"
-                      ? "bg-amber-100 text-amber-900 border border-amber-300"
+                      ? "bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs font-bold"
                       : "bg-white text-amber-600 border border-slate-200"
                   }`}
                 >
                   <span className="w-2 h-2 rounded-full bg-amber-500" />
                   <span>Mangler frivillig</span>
+                  {monthYellowCount > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-200/80 text-amber-900 font-bold">
+                      {monthYellowCount}
+                    </span>
+                  )}
                 </button>
                 <button
                   type="button"
                   id="filter-status-green"
                   onClick={() => setSelectedStatusFilter("green")}
-                  className={`px-2.5 py-1 rounded-lg font-semibold whitespace-nowrap cursor-pointer transition-colors flex items-center gap-1 ${
+                  className={`px-2.5 py-1.5 rounded-xl font-semibold whitespace-nowrap cursor-pointer transition-colors flex items-center gap-1.5 ${
                     selectedStatusFilter === "green"
-                      ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                      ? "bg-emerald-100 text-emerald-900 border border-emerald-300 shadow-2xs font-bold"
                       : "bg-white text-emerald-600 border border-slate-200"
                   }`}
                 >
                   <span className="w-2 h-2 rounded-full bg-emerald-500" />
                   <span>Fullt dekket</span>
+                  {monthGreenCount > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-200/80 text-emerald-900 font-bold">
+                      {monthGreenCount}
+                    </span>
+                  )}
                 </button>
               </div>
             </div>
 
+            {/* Active Filter Notification Bar */}
+            {(selectedStatusFilter !== "all" || selectedMonth !== "all") && (
+              <div className="p-2.5 bg-slate-100 rounded-xl border border-slate-200/80 text-xs flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-slate-500 text-[11px] font-medium">Filter:</span>
+                  {selectedMonth !== "all" && (
+                    <span className="font-bold bg-white text-slate-800 text-[11px] px-2 py-0.5 rounded-md border border-slate-200">
+                      {monthOptions.find((m) => m.id === selectedMonth)?.label}
+                    </span>
+                  )}
+                  {selectedStatusFilter === "red" && (
+                    <span className="font-bold bg-red-100 text-red-800 text-[11px] px-2 py-0.5 rounded-md border border-red-200 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                      Trenger vikar / Forfall
+                    </span>
+                  )}
+                  {selectedStatusFilter === "yellow" && (
+                    <span className="font-bold bg-amber-100 text-amber-800 text-[11px] px-2 py-0.5 rounded-md border border-amber-200 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                      Mangler frivillig
+                    </span>
+                  )}
+                  {selectedStatusFilter === "green" && (
+                    <span className="font-bold bg-emerald-100 text-emerald-800 text-[11px] px-2 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      Fullt dekket
+                    </span>
+                  )}
+                  <span className="text-slate-400">•</span>
+                  <span className="font-bold text-slate-700 text-[11px]">
+                    {filteredSemesterGatherings.length} {filteredSemesterGatherings.length === 1 ? "aktivitet" : "aktiviteter"}
+                    {selectedStatusFilter === "red" && ` (${filteredUrgentTasksCount} ${filteredUrgentTasksCount === 1 ? "oppgave" : "oppgaver"} med forfall)`}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  id="btn-reset-filters"
+                  onClick={() => {
+                    setSelectedMonth("all");
+                    setSelectedStatusFilter("all");
+                  }}
+                  className="text-[11px] font-bold text-slate-600 hover:text-slate-900 underline underline-offset-2 shrink-0 cursor-pointer"
+                >
+                  Nullstill
+                </button>
+              </div>
+            )}
+
             {filteredSemesterGatherings.length === 0 ? (
-              <div className="p-8 text-center bg-white rounded-2xl border border-dashed border-slate-200 text-slate-400 text-xs">
-                Ingen arrangementer matcher valgt måned eller filter.
+              <div className="p-8 text-center bg-white rounded-2xl border border-dashed border-slate-200 space-y-3">
+                <p className="text-xs text-slate-500 font-medium">
+                  {selectedStatusFilter === "red" && selectedMonth !== "all"
+                    ? `Ingen aktiviteter med forfall eller vikarbehov i ${monthOptions.find((m) => m.id === selectedMonth)?.label}.`
+                    : "Ingen aktiviteter matcher valgt måned eller filter."}
+                </p>
+                {selectedStatusFilter === "red" && selectedMonth !== "all" && urgentGatherings.length > 0 && (
+                  <button
+                    type="button"
+                    id="btn-show-all-months-urgent"
+                    onClick={() => setSelectedMonth("all")}
+                    className="inline-flex items-center gap-1 text-xs font-bold text-red-700 hover:text-red-800 bg-red-50 hover:bg-red-100 border border-red-200 px-3.5 py-2 rounded-xl cursor-pointer transition-colors shadow-2xs"
+                  >
+                    <span>Vis alle måneder ({urgentGatherings.length} {urgentGatherings.length === 1 ? "aktivitet" : "aktiviteter"} med forfall)</span>
+                    <span>→</span>
+                  </button>
+                )}
+                {selectedStatusFilter !== "all" && (
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedMonth("all");
+                        setSelectedStatusFilter("all");
+                      }}
+                      className="text-xs font-bold text-slate-600 hover:text-slate-900 underline underline-offset-2 cursor-pointer"
+                    >
+                      Nullstill alle filtre
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-3">
