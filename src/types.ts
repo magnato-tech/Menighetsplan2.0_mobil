@@ -26,6 +26,15 @@ export interface Group {
   meetingSchedule?: MeetingSchedule;
 }
 
+export interface ProgramItem {
+  id?: string;
+  time: string;
+  title: string;
+  description?: string;
+  taskId?: string;
+  groupId?: string;
+}
+
 export interface Gathering {
   id: string;
   groupId: string;
@@ -33,6 +42,7 @@ export interface Gathering {
   startsAt: string; // ISO date
   location?: string;
   type?: "arrangement" | "gruppesamling";
+  programSchedule?: ProgramItem[];
 }
 
 export interface GroupMessage {

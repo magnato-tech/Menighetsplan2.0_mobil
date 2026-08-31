@@ -1,11 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   useLeaderDashboard,
   formatNorwegianDateTime,
   LeaderGatheringItem,
 } from "../hooks/useAppHooks";
-import { useMockData } from "../context/MockDataContext";
 import { UserQuickSwitcherBar } from "../components/UserSwitcher";
 import { Task, Person } from "../types";
 import {
@@ -19,7 +18,9 @@ import {
   Users,
   Calendar,
   Layers,
-  MessageSquare,
+  Filter,
+  Check,
+  AlertCircle,
   Sparkles,
 } from "lucide-react";
 
@@ -210,7 +211,7 @@ const SemesterGatheringRow: React.FC<{
         />
       )}
 
-      {/* Bottom Link to Gathering Detail */}
+      {/* Bottom Link to Gathering/Arrangement Detail */}
       <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
         <span className="text-[11px] text-slate-400">
           {tasks.length} {tasks.length === 1 ? "oppgave tilknyttet" : "oppgaver tilknyttet"}
@@ -221,7 +222,7 @@ const SemesterGatheringRow: React.FC<{
           onClick={() => navigate(`/leder/samling/${gathering.id}`)}
           className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer transition-colors"
         >
-          <span>Åpne samlingsdetalj</span>
+          <span>Åpne arrangementsdetalj</span>
           <ChevronRight className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -241,6 +242,8 @@ export const LeaderPage: React.FC = () => {
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<"grupper" | "samlinger">("grupper");
+  const [selectedMonth, setSelectedMonth] = useState<string>("all");
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<"all" | "red" | "yellow" | "green">("all");
   const [feedback, setFeedback] = useState<{ text: string; type: "success" | "info" } | null>(null);
 
   const showFeedback = (text: string, type: "success" | "info" = "success") => {
@@ -251,7 +254,7 @@ export const LeaderPage: React.FC = () => {
   const handleAssign = async (taskId: string, personId: string, personName: string) => {
     const res = await assignTaskToPerson(taskId, personId);
     if (res.success) {
-      showFeedback(`Oppgaven ble direkte tildelt ${personName}. Samlingen er nå oppdatert!`);
+      showFeedback(`Oppgaven ble direkte tildelt ${personName}. Arrangementet er nå oppdatert!`);
     } else {
       showFeedback(res.error || "Kunne ikke tildele oppgaven.", "info");
     }
@@ -260,6 +263,35 @@ export const LeaderPage: React.FC = () => {
   const handleFollowUp = (taskId: string) => {
     showFeedback("Oppgaven er markert for personlig oppfølging av gruppeleder.", "info");
   };
+
+  // Month filtering definitions (Aug 2026 – Jan 2027)
+  const monthOptions = [
+    { id: "all", label: "Alle måneder" },
+    { id: "2026-08", label: "Aug 2026" },
+    { id: "2026-09", label: "Sep 2026" },
+    { id: "2026-10", label: "Okt 2026" },
+    { id: "2026-11", label: "Nov 2026" },
+    { id: "2026-12", label: "Des 2026" },
+    { id: "2027-01", label: "Jan 2027" },
+  ];
+
+  // Filtered semester gatherings
+  const filteredSemesterGatherings = useMemo(() => {
+    return allSemesterGatherings.filter((item) => {
+      // Month match
+      if (selectedMonth !== "all") {
+        const itemMonth = item.gathering.startsAt.substring(0, 7); // "YYYY-MM"
+        if (itemMonth !== selectedMonth) return false;
+      }
+
+      // Status match
+      if (selectedStatusFilter !== "all") {
+        if (item.staffing.color !== selectedStatusFilter) return false;
+      }
+
+      return true;
+    });
+  }, [allSemesterGatherings, selectedMonth, selectedStatusFilter]);
 
   // Friendly message if user is not a leader or deputy in any group
   if (!isLeader) {
@@ -308,7 +340,7 @@ export const LeaderPage: React.FC = () => {
             </h2>
           </div>
           <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
-            {leaderData.length} {leaderData.length === 1 ? "lederansvar" : "lederansvar"}
+            {leaderData.length} {leaderData.length === 1 ? "ledergruppe" : "ledergrupper"}
           </span>
         </div>
 
@@ -381,7 +413,7 @@ export const LeaderPage: React.FC = () => {
               </div>
               <p className="text-xs text-slate-700 leading-relaxed font-medium">
                 Det er meldt forfall på {urgentGatherings.length}{" "}
-                {urgentGatherings.length === 1 ? "samling" : "samlinger"} som trenger vikar. Du kan tildele vikar direkte fra samlingsdetaljen.
+                {urgentGatherings.length === 1 ? "arrangement" : "arrangementer"} som trenger vikar. Du kan tildele vikar direkte fra arrangementsdetaljen eller semesteroversikten.
               </p>
             </div>
           ) : (
@@ -395,7 +427,7 @@ export const LeaderPage: React.FC = () => {
                 </h3>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Ingen ubesatte forfall i dine grupper for øyeblikket. Alle oppgaver er dekket for kommende samlinger.
+                Ingen ubesatte forfall i dine grupper for øyeblikket. Alle oppgaver er dekket for kommende arrangementer.
               </p>
             </div>
           )}
@@ -409,14 +441,17 @@ export const LeaderPage: React.FC = () => {
                 Grupper du administrerer
               </h3>
               <span className="text-[11px] text-slate-400 font-medium">
-                Klikk for å administrere medlemmer og møteplan
+                Velg gruppe for å åpne gruppekortet
               </span>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3.5">
               {leaderData.map(({ group, members, gatherings, totalVacantTasks, totalOpenTasks }) => {
                 const isMainLeader = group.leaderIds.includes(currentUser.id);
                 const isDeputy = group.deputyLeaderIds?.includes(currentUser.id);
+
+                // Find next upcoming gathering/arrangement for this group
+                const nextGatheringItem = gatherings[0];
 
                 return (
                   <div
@@ -424,6 +459,7 @@ export const LeaderPage: React.FC = () => {
                     id={`leader-group-card-${group.id}`}
                     className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-3 hover:border-emerald-300 transition-all group"
                   >
+                    {/* Header */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
@@ -443,7 +479,7 @@ export const LeaderPage: React.FC = () => {
                           </span>
                         </div>
                         <p className="text-xs text-slate-500">
-                          Kategori: <span className="font-semibold text-slate-700 capitalize">{group.category || "Ikke angitt"}</span>
+                          Kategori: <span className="font-semibold text-slate-700 capitalize">{group.category || "Tjenestegruppe"}</span>
                         </p>
                       </div>
 
@@ -452,8 +488,41 @@ export const LeaderPage: React.FC = () => {
                       </span>
                     </div>
 
+                    {/* Next Arrangement & Staffing Status */}
+                    {nextGatheringItem ? (
+                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1.5 text-xs">
+                        <div className="flex items-center justify-between text-slate-500 font-medium">
+                          <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400">
+                            Neste arrangement:
+                          </span>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              nextGatheringItem.staffing.color === "red"
+                                ? "bg-red-100 text-red-700"
+                                : nextGatheringItem.staffing.color === "yellow"
+                                ? "bg-amber-100 text-amber-800"
+                                : "bg-emerald-100 text-emerald-800"
+                            }`}
+                          >
+                            {nextGatheringItem.staffing.badgeText}
+                          </span>
+                        </div>
+                        <div className="font-bold text-slate-800">
+                          {nextGatheringItem.gathering.title}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-slate-500 text-[11px]">
+                          <Clock className="w-3 h-3 text-slate-400" />
+                          <span>{formatNorwegianDateTime(nextGatheringItem.gathering.startsAt)}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 text-xs text-slate-400 italic">
+                        Ingen planlagte arrangementer for denne gruppen.
+                      </div>
+                    )}
+
                     {/* Meeting Schedule info */}
-                    <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between text-xs text-slate-600">
+                    <div className="flex items-center justify-between text-xs text-slate-600 px-1">
                       <span className="flex items-center gap-1.5 font-medium">
                         <Clock className="w-3.5 h-3.5 text-slate-400" />
                         {group.meetingSchedule
@@ -463,7 +532,7 @@ export const LeaderPage: React.FC = () => {
                     </div>
 
                     {/* Member preview chips */}
-                    <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                    <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
                       {members.map((m) => (
                         <span
                           key={m.id}
@@ -477,7 +546,7 @@ export const LeaderPage: React.FC = () => {
                     {/* Card Action Link */}
                     <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                       <span className="text-[11px] text-slate-400">
-                        {gatherings.length} planlagte samlinger
+                        {gatherings.length} planlagte arrangementer
                       </span>
                       <button
                         type="button"
@@ -485,7 +554,7 @@ export const LeaderPage: React.FC = () => {
                         onClick={() => navigate(`/leder/gruppe/${group.id}`)}
                         className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer transition-colors"
                       >
-                        <span>Åpne gruppekort</span>
+                        <span>Gå til gruppekort</span>
                         <ChevronRight className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -496,25 +565,101 @@ export const LeaderPage: React.FC = () => {
           </section>
         )}
 
-        {/* TAB 2: Semesteroversikt for Samlinger */}
+        {/* TAB 2: Semesteroversikt for Arrangementer */}
         {activeTab === "samlinger" && (
           <section className="space-y-4" aria-labelledby="leader-semester-heading">
             <div className="flex items-center justify-between">
               <h3 id="leader-semester-heading" className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Samlinger for semesteret
+                Arrangementer dette semesteret (6 mnd)
               </h3>
               <span className="text-[11px] text-slate-400 font-medium">
-                {allSemesterGatherings.length} samlinger registrert
+                {filteredSemesterGatherings.length} av {allSemesterGatherings.length} arrangementer
               </span>
             </div>
 
-            {allSemesterGatherings.length === 0 ? (
+            {/* Month Filter Selector */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+                {monthOptions.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    id={`filter-month-${m.id}`}
+                    onClick={() => setSelectedMonth(m.id)}
+                    className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-colors cursor-pointer text-xs ${
+                      selectedMonth === m.id
+                        ? "bg-slate-900 text-white shadow-xs"
+                        : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Status Filter Buttons */}
+              <div className="flex items-center gap-1.5 overflow-x-auto text-[11px]">
+                <button
+                  type="button"
+                  id="filter-status-all"
+                  onClick={() => setSelectedStatusFilter("all")}
+                  className={`px-2.5 py-1 rounded-lg font-semibold whitespace-nowrap cursor-pointer transition-colors ${
+                    selectedStatusFilter === "all"
+                      ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                      : "bg-white text-slate-500 border border-slate-200"
+                  }`}
+                >
+                  Alle statuser
+                </button>
+                <button
+                  type="button"
+                  id="filter-status-red"
+                  onClick={() => setSelectedStatusFilter("red")}
+                  className={`px-2.5 py-1 rounded-lg font-semibold whitespace-nowrap cursor-pointer transition-colors flex items-center gap-1 ${
+                    selectedStatusFilter === "red"
+                      ? "bg-red-100 text-red-900 border border-red-300"
+                      : "bg-white text-red-600 border border-slate-200"
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-red-500" />
+                  <span>Trenger vikar / Forfall</span>
+                </button>
+                <button
+                  type="button"
+                  id="filter-status-yellow"
+                  onClick={() => setSelectedStatusFilter("yellow")}
+                  className={`px-2.5 py-1 rounded-lg font-semibold whitespace-nowrap cursor-pointer transition-colors flex items-center gap-1 ${
+                    selectedStatusFilter === "yellow"
+                      ? "bg-amber-100 text-amber-900 border border-amber-300"
+                      : "bg-white text-amber-600 border border-slate-200"
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  <span>Mangler frivillig</span>
+                </button>
+                <button
+                  type="button"
+                  id="filter-status-green"
+                  onClick={() => setSelectedStatusFilter("green")}
+                  className={`px-2.5 py-1 rounded-lg font-semibold whitespace-nowrap cursor-pointer transition-colors flex items-center gap-1 ${
+                    selectedStatusFilter === "green"
+                      ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                      : "bg-white text-emerald-600 border border-slate-200"
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span>Fullt dekket</span>
+                </button>
+              </div>
+            </div>
+
+            {filteredSemesterGatherings.length === 0 ? (
               <div className="p-8 text-center bg-white rounded-2xl border border-dashed border-slate-200 text-slate-400 text-xs">
-                Ingen samlinger planlagt for dine grupper dette semesteret.
+                Ingen arrangementer matcher valgt måned eller filter.
               </div>
             ) : (
               <div className="space-y-3">
-                {allSemesterGatherings.map((item) => {
+                {filteredSemesterGatherings.map((item) => {
                   const groupData = leaderData.find((gd) => gd.group.id === item.group.id);
                   const members = groupData ? groupData.members : [];
 
@@ -536,3 +681,4 @@ export const LeaderPage: React.FC = () => {
     </div>
   );
 };
+

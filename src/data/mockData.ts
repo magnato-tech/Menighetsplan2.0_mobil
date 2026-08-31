@@ -75,12 +75,50 @@ export const initialGroups: Group[] = [
 
 export const initialGatherings: Gathering[] = [
   {
+    id: "gathering-aug-1",
+    groupId: "group-lyd",
+    title: "Semesteroppstart & testkveld",
+    startsAt: "2026-08-26T18:00:00.000Z",
+    location: "Hovedsalen",
+    type: "gruppesamling",
+    programSchedule: [
+      { time: "18:00", title: "Oppmøte & pizza", description: "Felles måltid og semesterplan" },
+      { time: "18:45", title: "Gjennomgang av nytt utstyr", description: "Miksebord og trådløse enheter", taskId: "task-aug-1" },
+      { time: "19:30", title: "Lydprøve med band", description: "Kalibrering og monitorjustering" },
+    ],
+  },
+  {
+    id: "gathering-aug-2",
+    groupId: "group-kaffe",
+    title: "Gudstjeneste & velkomstkaffe",
+    startsAt: "2026-08-30T11:00:00.000Z",
+    location: "Hovedsalen og kafeen",
+    type: "arrangement",
+    programSchedule: [
+      { time: "11:00", title: "Velkommen & åpningsbønn" },
+      { time: "11:05", title: "Fellessang & lovsang" },
+      { time: "11:30", title: "Semestertale: Bygge fellesskap" },
+      { time: "12:15", title: "Velkomstkirkekaffe", description: "Servering av kaffe og bakst", taskId: "task-aug-2" },
+    ],
+  },
+  {
     id: "gathering-1",
     groupId: "group-kaffe",
     title: "Gudstjeneste & dåp",
     startsAt: "2026-09-06T11:00:00.000Z",
     location: "Hovedsalen og kafeen",
     type: "arrangement",
+    programSchedule: [
+      { time: "11:00", title: "Klokkeringing, preludium & velkommen", description: "Liturg og dåpsfamilier samles i våpenhuset" },
+      { time: "11:05", title: "Fellessang & lovsang", description: "Lovsangsteamet leder 3 sanger", taskId: "task-1" },
+      { time: "11:20", title: "Dåpshandling & barnevelsignelse", description: "2 dåpsbarn bæres frem til døpefonten" },
+      { time: "11:35", title: "Barnekirke sendes til kjellersalen", description: "Barna går samlet til søndagsskolen", taskId: "task-7" },
+      { time: "11:40", title: "Kunngjøringer & kollekt" },
+      { time: "11:50", title: "Preken / Dagens tale", description: "Pastor preker om nåde og fellesskap", taskId: "task-9" },
+      { time: "12:15", title: "Nattverd & personlig forbønn", description: "3 nattverdstasjoner i salen" },
+      { time: "12:30", title: "Velsignelse & postludium" },
+      { time: "12:35", title: "Kirkekaffe & fellesskap i kafeen", description: "Kaffeservering og prat", taskId: "task-3" },
+    ],
   },
   {
     id: "gathering-2",
@@ -89,6 +127,12 @@ export const initialGatherings: Gathering[] = [
     startsAt: "2026-09-11T19:00:00.000Z",
     location: "Ungdomssalen",
     type: "arrangement",
+    programSchedule: [
+      { time: "19:00", title: "Kiosk & mingling" },
+      { time: "19:30", title: "Lovsang med ungdomsbandet", taskId: "task-6" },
+      { time: "20:00", title: "Ungdomstale" },
+      { time: "20:45", title: "Sosialt & spill i kafeen" },
+    ],
   },
   {
     id: "gathering-3",
@@ -97,6 +141,12 @@ export const initialGatherings: Gathering[] = [
     startsAt: "2026-09-13T11:00:00.000Z",
     location: "Hovedsalen og kafeen",
     type: "arrangement",
+    programSchedule: [
+      { time: "11:00", title: "Velkommen & intromusikk" },
+      { time: "11:10", title: "Lovsang & tekstlesning" },
+      { time: "11:35", title: "Preken: Høstens frukter" },
+      { time: "12:15", title: "Felles varm høstlunsj i kafeen", taskId: "task-7" },
+    ],
   },
   {
     id: "gathering-4",
@@ -105,6 +155,10 @@ export const initialGatherings: Gathering[] = [
     startsAt: "2026-09-16T18:30:00.000Z",
     location: "Kjøkkenet & peisestua",
     type: "gruppesamling",
+    programSchedule: [
+      { time: "18:30", title: "Enkel kveldsmat & prat" },
+      { time: "19:15", title: "Planlegging av høstens serveringer & innkjøp" },
+    ],
   },
   {
     id: "gathering-5",
@@ -113,6 +167,10 @@ export const initialGatherings: Gathering[] = [
     startsAt: "2026-09-22T19:00:00.000Z",
     location: "Hovedsalen",
     type: "gruppesamling",
+    programSchedule: [
+      { time: "19:00", title: "Gjennomgang av digitale scener og monitorer" },
+      { time: "20:00", title: "Feilsøking på trådløse kanaler" },
+    ],
   },
   {
     id: "gathering-6",
@@ -121,6 +179,12 @@ export const initialGatherings: Gathering[] = [
     startsAt: "2026-09-27T11:00:00.000Z",
     location: "Hovedsalen",
     type: "arrangement",
+    programSchedule: [
+      { time: "11:00", title: "Festlig inngang med barnekoret" },
+      { time: "11:15", title: "Barnekor opptreden (flere mikrofoner)", taskId: "task-sep-6-lyd" },
+      { time: "11:40", title: "Kort interaktiv familietale" },
+      { time: "12:10", title: "Saft og boller i våpenhuset", taskId: "task-sep-6-kaffe" },
+    ],
   },
   {
     id: "gathering-7",
@@ -129,6 +193,106 @@ export const initialGatherings: Gathering[] = [
     startsAt: "2026-09-06T11:15:00.000Z",
     location: "Kjellersalen",
     type: "arrangement",
+    programSchedule: [
+      { time: "11:15", title: "Barna ankommer fra hovedsalen" },
+      { time: "11:25", title: "Sang og bevegelse" },
+      { time: "11:40", title: "Bibelhistorie & dramatisering" },
+      { time: "12:00", title: "Formingsaktivitet & lek" },
+    ],
+  },
+  {
+    id: "gathering-okt-1",
+    groupId: "group-kaffe",
+    title: "Høsttakkefest & felleskapsmåltid",
+    startsAt: "2026-10-11T11:00:00.000Z",
+    location: "Hovedsalen og kafeen",
+    type: "arrangement",
+    programSchedule: [
+      { time: "11:00", title: "Høsttakkefest gudstjeneste" },
+      { time: "12:15", title: "Suppe og kaffe i storsalen", taskId: "task-okt-1" },
+    ],
+  },
+  {
+    id: "gathering-okt-2",
+    groupId: "group-lyd",
+    title: "Kveldsgudstjeneste & lovsangskveld",
+    startsAt: "2026-10-25T18:00:00.000Z",
+    location: "Hovedsalen",
+    type: "arrangement",
+    programSchedule: [
+      { time: "18:00", title: "Utvidet lovsang og bønnevandring", taskId: "task-okt-2" },
+      { time: "19:15", title: "Kveldstale & nattverd" },
+    ],
+  },
+  {
+    id: "gathering-nov-1",
+    groupId: "group-kaffe",
+    title: "Allehelgensgudstjeneste & minnestund",
+    startsAt: "2026-11-01T11:00:00.000Z",
+    location: "Hovedsalen",
+    type: "arrangement",
+    programSchedule: [
+      { time: "11:00", title: "Allehelgensgudstjeneste med lystenning" },
+      { time: "12:20", title: "Enkel kaffe og te for samtale", taskId: "task-nov-1" },
+    ],
+  },
+  {
+    id: "gathering-nov-2",
+    groupId: "group-lyd",
+    title: "Misjonsgudstjeneste med videohilsen",
+    startsAt: "2026-11-15T11:00:00.000Z",
+    location: "Hovedsalen",
+    type: "arrangement",
+    programSchedule: [
+      { time: "11:00", title: "Gudstjeneste med direktelink / video", taskId: "task-nov-2" },
+      { time: "12:15", title: "Kirkekaffe" },
+    ],
+  },
+  {
+    id: "gathering-des-1",
+    groupId: "group-kaffe",
+    title: "1. søndag i advent & julegrantenning",
+    startsAt: "2026-12-06T11:00:00.000Z",
+    location: "Hovedsalen og kirkebakken",
+    type: "arrangement",
+    programSchedule: [
+      { time: "11:00", title: "Adventsgudstjeneste med tenning av 1. lys" },
+      { time: "12:15", title: "Gløgg, pepperkaker og gang rundt treet", taskId: "task-des-1" },
+    ],
+  },
+  {
+    id: "gathering-des-2",
+    groupId: "group-lyd",
+    title: "Julaftengudstjeneste & familiemøte",
+    startsAt: "2026-12-24T14:30:00.000Z",
+    location: "Hovedsalen",
+    type: "arrangement",
+    programSchedule: [
+      { time: "14:30", title: "Høytidsgudstjeneste, solosang og juleevangeliet", taskId: "task-des-2" },
+    ],
+  },
+  {
+    id: "gathering-jan-1",
+    groupId: "group-kaffe",
+    title: "Nyttårsgudstjeneste & kirkekaffe",
+    startsAt: "2027-01-10T11:00:00.000Z",
+    location: "Hovedsalen og kafeen",
+    type: "arrangement",
+    programSchedule: [
+      { time: "11:00", title: "Nyttårsgudstjeneste" },
+      { time: "12:15", title: "Nyttårskirkekaffe", taskId: "task-jan-1" },
+    ],
+  },
+  {
+    id: "gathering-jan-2",
+    groupId: "group-lyd",
+    title: "Visjonsgudstjeneste for det nye året",
+    startsAt: "2027-01-24T11:00:00.000Z",
+    location: "Hovedsalen",
+    type: "arrangement",
+    programSchedule: [
+      { time: "11:00", title: "Visjonsgudstjeneste med multimediapresentasjon", taskId: "task-jan-2" },
+    ],
   },
 ];
 
@@ -138,7 +302,7 @@ export const initialGroupMessages: GroupMessage[] = [
     groupId: "group-kaffe",
     senderPersonId: "person-1",
     senderName: "Kari Nordmann",
-    content: "Velkommen til nytt semester i kaffegruppen! Husk å sjekke datoene dine for september.",
+    content: "Velkommen til nytt semester i kaffegruppen! Husk å sjekke datoene dine for september og høsten.",
     createdAt: "2026-09-01T09:00:00.000Z",
   },
   {
@@ -146,12 +310,32 @@ export const initialGroupMessages: GroupMessage[] = [
     groupId: "group-lyd",
     senderPersonId: "person-2",
     senderName: "Ola Hansen",
-    content: "Vi har en teknisk opplæringskveld tirsdag 22. september kl. 19:00.",
+    content: "Vi har en teknisk opplæringskveld tirsdag 22. september kl. 19:00. Vel møtt!",
     createdAt: "2026-09-02T14:30:00.000Z",
   },
 ];
 
 export const initialTasks: Task[] = [
+  {
+    id: "task-aug-1",
+    gatheringId: "gathering-aug-1",
+    groupId: "group-lyd",
+    title: "Teknisk riggansvarlig",
+    description: "Klargjøre miksebord og teste trådløse mikrofoner.",
+    instruction: "Møt kl. 17:30. Slå på rack og sjekk batterier.",
+    status: "confirmed",
+    neededCount: 1,
+  },
+  {
+    id: "task-aug-2",
+    gatheringId: "gathering-aug-2",
+    groupId: "group-kaffe",
+    title: "Velkomstkaffe vert",
+    description: "Trakte kaffe og sette frem boller til semesterstart.",
+    instruction: "Møt kl. 10:15. Trakte 3 kanner kaffe.",
+    status: "confirmed",
+    neededCount: 2,
+  },
   {
     id: "task-1",
     gatheringId: "gathering-1",
@@ -220,6 +404,7 @@ export const initialTasks: Task[] = [
     description: "Ta med en langpannekake, boller eller et friskt fruktfat til kirkekaffen etter gudstjenesten.",
     instruction: "Lever ferdig oppskåret kake eller fruktfat på kjøkkenet før kl. 10:45. Husk å merke fat med navn om du ønsker det tilbake.",
     status: "open",
+    neededCount: 2,
   },
   {
     id: "task-6",
@@ -241,9 +426,121 @@ export const initialTasks: Task[] = [
     status: "open",
     neededCount: 2,
   },
+  {
+    id: "task-sep-6-lyd",
+    gatheringId: "gathering-6",
+    groupId: "group-lyd",
+    title: "Lydtekniker familiegudstjeneste",
+    description: "Mikk opp barnekoret og taler.",
+    instruction: "Oppmøte 09:45 for lydprøve med barna.",
+    status: "confirmed",
+    neededCount: 1,
+  },
+  {
+    id: "task-sep-6-kaffe",
+    gatheringId: "gathering-6",
+    groupId: "group-kaffe",
+    title: "Saft og boller vertskap",
+    description: "Dele ut saft og boller til barna etter møtet.",
+    instruction: "Oppmøte 11:30 på kjøkkenet.",
+    status: "confirmed",
+    neededCount: 2,
+  },
+  {
+    id: "task-okt-1",
+    gatheringId: "gathering-okt-1",
+    groupId: "group-kaffe",
+    title: "Suppe- og kaffeservering",
+    description: "Servere varm suppe og brød på høsttakkefesten.",
+    instruction: "Oppmøte kl. 10:30. Varme suppegryter og skjære brød.",
+    status: "open",
+    neededCount: 2,
+  },
+  {
+    id: "task-okt-2",
+    gatheringId: "gathering-okt-2",
+    groupId: "group-lyd",
+    title: "Lydtekniker kveldsmøte",
+    description: "Lyd for kveldsgudstjeneste og bønnevandring.",
+    instruction: "Oppmøte kl. 17:00 for lydsjekk.",
+    status: "confirmed",
+    neededCount: 1,
+  },
+  {
+    id: "task-nov-1",
+    gatheringId: "gathering-nov-1",
+    groupId: "group-kaffe",
+    title: "Vertskap allehelgensdag",
+    description: "Enkel kaffeservering og vertskap i kirkestua.",
+    instruction: "Oppmøte kl. 10:30.",
+    status: "confirmed",
+    neededCount: 1,
+  },
+  {
+    id: "task-nov-2",
+    groupId: "group-lyd",
+    gatheringId: "gathering-nov-2",
+    title: "Video- og lydoverføring",
+    description: "Kjøre storskjerm og videolink for misjonsgudstjeneste.",
+    instruction: "Oppmøte kl. 10:00 for test av videolinje.",
+    status: "vacant",
+    neededCount: 1,
+  },
+  {
+    id: "task-des-1",
+    gatheringId: "gathering-des-1",
+    groupId: "group-kaffe",
+    title: "Gløgg- og julekakeansvarlig",
+    description: "Varme gløgg og dekke bord med pepperkaker og klementiner.",
+    instruction: "Oppmøte kl. 10:30 på kjøkkenet.",
+    status: "confirmed",
+    neededCount: 3,
+  },
+  {
+    id: "task-des-2",
+    gatheringId: "gathering-des-2",
+    groupId: "group-lyd",
+    title: "Lyd og lys julaften",
+    description: "Styre lyd for julaftengudstjenesten kl. 14:30.",
+    instruction: "Oppmøte kl. 13:30.",
+    status: "confirmed",
+    neededCount: 2,
+  },
+  {
+    id: "task-jan-1",
+    gatheringId: "gathering-jan-1",
+    groupId: "group-kaffe",
+    title: "Nyttårskirkekaffe",
+    description: "Trakte kaffe og rydde etter årets første gudstjeneste.",
+    instruction: "Oppmøte kl. 10:15.",
+    status: "open",
+    neededCount: 2,
+  },
+  {
+    id: "task-jan-2",
+    gatheringId: "gathering-jan-2",
+    groupId: "group-lyd",
+    title: "Lydtekniker visjonsgudstjeneste",
+    description: "Lyd og streaming for visjonsgudstjenesten.",
+    instruction: "Oppmøte kl. 09:30.",
+    status: "confirmed",
+    neededCount: 1,
+  },
 ];
 
 export const initialAssignments: Assignment[] = [
+  {
+    id: "assign-aug-1",
+    taskId: "task-aug-1",
+    personId: "person-2", // Ola Hansen
+    response: "confirmed",
+  },
+  {
+    id: "assign-aug-2",
+    taskId: "task-aug-2",
+    personId: "person-1", // Kari Nordmann
+    response: "confirmed",
+  },
   {
     id: "assign-1",
     taskId: "task-1",
@@ -302,6 +599,60 @@ export const initialAssignments: Assignment[] = [
     id: "assign-6",
     taskId: "task-6",
     personId: "person-1", // Kari Nordmann has Lydtekniker ungdomsmøte
+    response: "confirmed",
+  },
+  {
+    id: "assign-sep-6-lyd",
+    taskId: "task-sep-6-lyd",
+    personId: "person-2", // Ola Hansen
+    response: "confirmed",
+  },
+  {
+    id: "assign-sep-6-kaffe",
+    taskId: "task-sep-6-kaffe",
+    personId: "person-1", // Kari Nordmann
+    response: "confirmed",
+  },
+  {
+    id: "assign-okt-2",
+    taskId: "task-okt-2",
+    personId: "person-2", // Ola Hansen
+    response: "confirmed",
+  },
+  {
+    id: "assign-nov-1",
+    taskId: "task-nov-1",
+    personId: "person-4", // Jonas Lie
+    response: "confirmed",
+  },
+  {
+    id: "assign-nov-2",
+    taskId: "task-nov-2",
+    personId: "person-2",
+    response: "withdrawn",
+  },
+  {
+    id: "assign-des-1-1",
+    taskId: "task-des-1",
+    personId: "person-1", // Kari
+    response: "confirmed",
+  },
+  {
+    id: "assign-des-1-2",
+    taskId: "task-des-1",
+    personId: "person-4", // Jonas
+    response: "confirmed",
+  },
+  {
+    id: "assign-des-2",
+    taskId: "task-des-2",
+    personId: "person-2", // Ola
+    response: "confirmed",
+  },
+  {
+    id: "assign-jan-2",
+    taskId: "task-jan-2",
+    personId: "person-2", // Ola
     response: "confirmed",
   },
 ];

@@ -991,12 +991,18 @@ export function useLeaderGroupDetail(groupId: string) {
     groups,
     gatherings,
     tasks,
+    assignments,
     getGroupById,
     updateGroup,
     addGroupMember,
     removeGroupMember,
     getGroupMessages,
     sendGroupMessage,
+    assignTaskToPerson,
+    updateAssignmentStatus,
+    removeAssignment,
+    updateTaskStatus,
+    getPersonById,
   } = useMockData();
 
   const group = getGroupById(groupId);
@@ -1029,19 +1035,72 @@ export function useLeaderGroupDetail(groupId: string) {
 
   const groupGatherings = useMemo(() => {
     if (!group) return [];
+    
+    // Find all gatherings assigned to this group or where this group has tasks
+    const groupTasks = tasks.filter((t) => t.groupId === group.id);
+    const relevantGatheringIds = new Set([
+      ...gatherings.filter((g) => g.groupId === group.id).map((g) => g.id),
+      ...groupTasks.map((t) => t.gatheringId),
+    ]);
+
     return gatherings
-      .filter((g) => g.groupId === group.id)
+      .filter((g) => relevantGatheringIds.has(g.id))
       .map((gathering) => {
-        const gatheringTasks = tasks.filter((t) => t.gatheringId === gathering.id);
+        const gatheringTasks = groupTasks.filter((t) => t.gatheringId === gathering.id);
         const staffing = getStaffingStatus(gatheringTasks);
+
+        // Detailed task items with assignments
+        const taskItems = gatheringTasks.map((task) => {
+          const taskAssignments = assignments.filter((a) => a.taskId === task.id);
+          const assignedPersons = taskAssignments.map((a) => {
+            const person = getPersonById(a.personId);
+            let statusLabel = "Forespurt";
+            if (a.response === "confirmed") statusLabel = "Akseptert";
+            if (a.response === "withdrawn") statusLabel = "Forfall";
+            if (a.response === "declined") statusLabel = "Avslått";
+
+            return {
+              assignment: a,
+              person,
+              statusLabel,
+              response: a.response,
+            };
+          });
+
+          const confirmedCount = taskAssignments.filter((a) => a.response === "confirmed").length;
+          const neededCount = task.neededCount || 1;
+          const isFullyCovered = confirmedCount >= neededCount;
+          const hasForfall = taskAssignments.some((a) => a.response === "withdrawn") || task.status === "vacant";
+
+          return {
+            task,
+            assignedPersons,
+            confirmedCount,
+            neededCount,
+            isFullyCovered,
+            hasForfall,
+          };
+        });
+
+        // Compute total needed and confirmed count for gathering
+        const totalNeeded = taskItems.reduce((acc, t) => acc + (t.neededCount || 1), 0);
+        const totalConfirmed = taskItems.reduce((acc, t) => acc + t.confirmedCount, 0);
+        const hasForfall = taskItems.some((t) => t.hasForfall);
+        const isFullyCovered = totalNeeded > 0 && totalConfirmed >= totalNeeded && !hasForfall;
+
         return {
           gathering,
           tasks: gatheringTasks,
+          taskItems,
+          totalNeeded,
+          totalConfirmed,
+          hasForfall,
+          isFullyCovered,
           staffing,
         };
       })
       .sort((a, b) => new Date(a.gathering.startsAt).getTime() - new Date(b.gathering.startsAt).getTime());
-  }, [group, gatherings, tasks]);
+  }, [group, gatherings, tasks, assignments, getPersonById]);
 
   const messages = useMemo(() => {
     if (!group) return [];
@@ -1074,6 +1133,10 @@ export function useLeaderGroupDetail(groupId: string) {
     addGroupMember,
     removeGroupMember,
     sendMessage: handleSendMessage,
+    assignTaskToPerson,
+    updateAssignmentStatus,
+    removeAssignment,
+    updateTaskStatus,
   };
 }
 
@@ -1090,6 +1153,9 @@ export function useLeaderGatheringDetail(gatheringId: string) {
     getGroupById,
     getPersonById,
     assignTaskToPerson,
+    updateAssignmentStatus,
+    removeAssignment,
+    updateTaskStatus,
     reportAbsence: performReportAbsence,
     updateTaskNeededCount,
     updateTaskInstruction,
@@ -1101,26 +1167,62 @@ export function useLeaderGatheringDetail(gatheringId: string) {
     return getGatheringById(gatheringId) || null;
   }, [gatheringId, getGatheringById, gatherings]);
 
+  // All tasks for this gathering
+  const gatheringTasks = useMemo(() => {
+    if (!gathering) return [];
+    return tasks.filter((t) => t.gatheringId === gathering.id);
+  }, [gathering, tasks]);
+
+  // Find all groups involved in this gathering
+  const involvedGroupIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (gathering) {
+      ids.add(gathering.groupId);
+    }
+    gatheringTasks.forEach((t) => ids.add(t.groupId));
+    return Array.from(ids);
+  }, [gathering, gatheringTasks]);
+
+  const involvedGroups = useMemo(() => {
+    return involvedGroupIds.map((id) => getGroupById(id)).filter(Boolean) as Group[];
+  }, [involvedGroupIds, getGroupById]);
+
+  // Determine user's active group for this gathering:
+  // If user is leader/deputy in one of the involved groups, pick that group
+  const userLedGroup = useMemo(() => {
+    return involvedGroups.find(
+      (g) => g.leaderIds.includes(currentUser.id) || g.deputyLeaderIds?.includes(currentUser.id)
+    ) || null;
+  }, [involvedGroups, currentUser]);
+
   const group = useMemo(() => {
-    if (!gathering) return null;
-    return getGroupById(gathering.groupId) || null;
-  }, [gathering, getGroupById, groups]);
+    if (userLedGroup) return userLedGroup;
+    if (gathering) return getGroupById(gathering.groupId) || null;
+    return null;
+  }, [userLedGroup, gathering, getGroupById]);
 
-  const isLeader = Boolean(group && group.leaderIds.includes(currentUser.id));
-  const isDeputy = Boolean(group && group.deputyLeaderIds?.includes(currentUser.id));
+  const isLeader = Boolean(
+    (group && group.leaderIds.includes(currentUser.id)) ||
+    involvedGroups.some((g) => g.leaderIds.includes(currentUser.id))
+  );
+  const isDeputy = Boolean(
+    (group && group.deputyLeaderIds?.includes(currentUser.id)) ||
+    involvedGroups.some((g) => g.deputyLeaderIds?.includes(currentUser.id))
+  );
   const isAdmin = currentUser.globalRole === "admin";
-  const hasAccess = Boolean(group && (isLeader || isDeputy || isAdmin));
+  const hasAccess = Boolean(isAdmin || isLeader || isDeputy);
 
+  // Group members available for leader to assign
   const groupMembers = useMemo(() => {
-    if (!group) return [];
+    if (!group) return allPersons;
     return allPersons.filter((p) => group.memberIds.includes(p.id));
   }, [group, allPersons]);
 
   const tasksWithDetails = useMemo(() => {
     if (!gathering) return [];
-    const gatheringTasks = tasks.filter((t) => t.gatheringId === gathering.id);
 
     return gatheringTasks.map((task) => {
+      const taskGroup = getGroupById(task.groupId);
       const taskAssignments = assignments.filter((a) => a.taskId === task.id);
       const assignedPersons = taskAssignments.map((a) => {
         const person = getPersonById(a.personId);
@@ -1138,38 +1240,51 @@ export function useLeaderGatheringDetail(gatheringId: string) {
       });
 
       const confirmedPersonsCount = taskAssignments.filter((a) => a.response === "confirmed").length;
-      const neededCount = task.neededCount;
-      const isFullyCovered =
-        neededCount !== undefined ? confirmedPersonsCount >= neededCount : task.status === "confirmed";
-      const missingCount =
-        neededCount !== undefined
-          ? Math.max(0, neededCount - confirmedPersonsCount)
-          : task.status === "confirmed"
-          ? 0
-          : 1;
+      const neededCount = task.neededCount || 1;
+      const isFullyCovered = confirmedPersonsCount >= neededCount;
+      const hasWithdrawn = taskAssignments.some((a) => a.response === "withdrawn");
+      const missingCount = Math.max(0, neededCount - confirmedPersonsCount);
+      const isMyGroup = Boolean(group && task.groupId === group.id);
 
       let staffingStatusLabel = "Behov ikke satt";
-      if (neededCount !== undefined) {
-        if (isFullyCovered) {
-          staffingStatusLabel = "Fullt dekket";
-        } else {
-          staffingStatusLabel = `Mangler: ${missingCount}`;
-        }
+      if (isFullyCovered) {
+        staffingStatusLabel = "Fullt dekket";
+      } else if (hasWithdrawn || task.status === "vacant") {
+        staffingStatusLabel = "Forfall / Trenger vikar";
       } else {
-        staffingStatusLabel = task.status === "confirmed" ? "Fullt dekket" : "Mangler bemanning";
+        staffingStatusLabel = `Mangler ${missingCount} frivillig`;
       }
 
       return {
         task,
+        taskGroup,
+        isMyGroup,
         neededCount,
         assignedPersons,
         confirmedPersonsCount,
         isFullyCovered,
         missingCount,
+        hasWithdrawn,
         staffingStatusLabel,
       };
     });
-  }, [gathering, tasks, assignments, getPersonById]);
+  }, [gathering, gatheringTasks, assignments, getPersonById, getGroupById, group]);
+
+  // Combined program schedule including items with or without task links
+  const programSchedule = useMemo(() => {
+    if (!gathering) return [];
+    if (gathering.programSchedule && gathering.programSchedule.length > 0) {
+      return gathering.programSchedule;
+    }
+    // Fallback: build default program schedule from gathering tasks
+    return [
+      { time: "11:00", title: "Velkommen & åpningsbønn" },
+      { time: "11:05", title: "Fellessang & lovsang" },
+      { time: "11:50", title: "Preken / Dagens tale" },
+      { time: "12:15", title: "Nattverd & forbønn" },
+      { time: "12:35", title: "Kirkekaffe & fellesskap" },
+    ];
+  }, [gathering]);
 
   return {
     hasAccess,
@@ -1179,9 +1294,15 @@ export function useLeaderGatheringDetail(gatheringId: string) {
     currentUser,
     gathering,
     group,
+    involvedGroups,
     groupMembers,
+    allPersons,
     tasksWithDetails,
+    programSchedule,
     assignTaskToPerson,
+    updateAssignmentStatus,
+    removeAssignment,
+    updateTaskStatus,
     reportAbsence: performReportAbsence,
     updateTaskNeededCount,
     updateTaskInstruction,

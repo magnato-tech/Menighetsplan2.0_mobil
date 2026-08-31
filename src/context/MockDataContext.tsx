@@ -46,8 +46,11 @@ export interface MockDataContextType {
   getGroupMessages: (groupId: string) => GroupMessage[];
 
   // Actions
-  assignTaskToPerson: (taskId: string, personId: string) => Promise<{ success: boolean; error?: string }>;
+  assignTaskToPerson: (taskId: string, personId: string, responseStatus?: "confirmed" | "pending") => Promise<{ success: boolean; error?: string }>;
   reportAbsence: (taskId: string, personId: string) => Promise<{ success: boolean; error?: string }>;
+  updateAssignmentStatus: (assignmentId: string, response: "confirmed" | "pending" | "declined" | "withdrawn") => { success: boolean; error?: string };
+  removeAssignment: (assignmentId: string) => { success: boolean; error?: string };
+  updateTaskStatus: (taskId: string, status: Task["status"]) => { success: boolean; error?: string };
   updateGroupName: (groupId: string, newName: string) => { success: boolean; error?: string };
   updateGroup: (groupId: string, updates: Partial<Group>) => { success: boolean; error?: string };
   addPerson: (data: { name: string; phone?: string; email?: string }) => { success: boolean; person?: Person; error?: string };
@@ -185,7 +188,7 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Action: Take / Assign task to person
   const assignTaskToPerson = useCallback(
-    async (taskId: string, personId: string): Promise<{ success: boolean; error?: string }> => {
+    async (taskId: string, personId: string, responseStatus: "confirmed" | "pending" = "confirmed"): Promise<{ success: boolean; error?: string }> => {
       const task = tasks.find((t) => t.id === taskId);
       if (!task) {
         return { success: false, error: "Oppgaven ble ikke funnet." };
@@ -194,37 +197,152 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (!isPersonInGroup(personId, task.groupId)) {
         return {
           success: false,
-          error: "Du har ikke tilgang til å ta oppgaver utenfor dine grupper.",
+          error: "Personen er ikke medlem i gruppen som har oppgaven.",
         };
       }
 
-      // Update task status to 'confirmed'
-      setTasks((prev) =>
-        prev.map((t) => (t.id === taskId ? { ...t, status: "confirmed" } : t))
-      );
-
-      // Upsert assignment
+      // Upsert assignment for this (taskId, personId)
+      let newAssignments: Assignment[] = [];
       setAssignments((prev) => {
-        const existingIdx = prev.findIndex((a) => a.taskId === taskId);
+        const existingIdx = prev.findIndex((a) => a.taskId === taskId && a.personId === personId);
         const newAssignment: Assignment = {
-          id: existingIdx >= 0 ? prev[existingIdx].id : `assign-${Date.now()}`,
+          id: existingIdx >= 0 ? prev[existingIdx].id : `assign-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           taskId,
           personId,
-          response: "confirmed",
+          response: responseStatus,
         };
 
         if (existingIdx >= 0) {
           const updated = [...prev];
           updated[existingIdx] = newAssignment;
+          newAssignments = updated;
           return updated;
         } else {
-          return [...prev, newAssignment];
+          const updated = [...prev, newAssignment];
+          newAssignments = updated;
+          return updated;
         }
       });
+
+      // Update task status based on confirmed assignments vs neededCount
+      setTasks((prev) =>
+        prev.map((t) => {
+          if (t.id === taskId) {
+            const taskAssignments = newAssignments.filter((a) => a.taskId === taskId);
+            const confirmedCount = taskAssignments.filter((a) => a.response === "confirmed").length;
+            const needed = t.neededCount || 1;
+            const hasWithdrawn = taskAssignments.some((a) => a.response === "withdrawn");
+
+            if (confirmedCount >= needed) {
+              return { ...t, status: "confirmed" };
+            } else if (hasWithdrawn && confirmedCount === 0) {
+              return { ...t, status: "vacant" };
+            } else if (confirmedCount > 0) {
+              return { ...t, status: "assigned" };
+            } else {
+              return { ...t, status: responseStatus === "pending" ? "open" : "confirmed" };
+            }
+          }
+          return t;
+        })
+      );
 
       return { success: true };
     },
     [tasks, isPersonInGroup]
+  );
+
+  // Action: Update single assignment status (e.g. from Leader: Aksepter, Forfall, Avslå, Forespurt)
+  const updateAssignmentStatus = useCallback(
+    (assignmentId: string, response: "confirmed" | "pending" | "declined" | "withdrawn"): { success: boolean; error?: string } => {
+      const assignment = assignments.find((a) => a.id === assignmentId);
+      if (!assignment) {
+        return { success: false, error: "Tildelingen ble ikke funnet." };
+      }
+
+      let updatedAssignments: Assignment[] = [];
+      setAssignments((prev) => {
+        const next = prev.map((a) => (a.id === assignmentId ? { ...a, response } : a));
+        updatedAssignments = next;
+        return next;
+      });
+
+      // Recalculate parent task status
+      setTasks((prev) =>
+        prev.map((t) => {
+          if (t.id === assignment.taskId) {
+            const taskAssigns = updatedAssignments.filter((a) => a.taskId === t.id);
+            const confirmedCount = taskAssigns.filter((a) => a.response === "confirmed").length;
+            const needed = t.neededCount || 1;
+            const hasWithdrawn = taskAssigns.some((a) => a.response === "withdrawn");
+
+            if (confirmedCount >= needed) {
+              return { ...t, status: "confirmed" };
+            } else if (response === "withdrawn" || (hasWithdrawn && confirmedCount === 0)) {
+              return { ...t, status: "vacant" };
+            } else if (confirmedCount > 0) {
+              return { ...t, status: "assigned" };
+            } else {
+              return { ...t, status: "open" };
+            }
+          }
+          return t;
+        })
+      );
+
+      return { success: true };
+    },
+    [assignments]
+  );
+
+  // Action: Remove assignment (e.g. unassign / fjern person)
+  const removeAssignment = useCallback(
+    (assignmentId: string): { success: boolean; error?: string } => {
+      const assignment = assignments.find((a) => a.id === assignmentId);
+      if (!assignment) {
+        return { success: false, error: "Tildelingen ble ikke funnet." };
+      }
+
+      const taskId = assignment.taskId;
+      let remainingAssignments: Assignment[] = [];
+      setAssignments((prev) => {
+        const next = prev.filter((a) => a.id !== assignmentId);
+        remainingAssignments = next;
+        return next;
+      });
+
+      // Recalculate parent task status
+      setTasks((prev) =>
+        prev.map((t) => {
+          if (t.id === taskId) {
+            const taskAssigns = remainingAssignments.filter((a) => a.taskId === t.id);
+            const confirmedCount = taskAssigns.filter((a) => a.response === "confirmed").length;
+            const needed = t.neededCount || 1;
+
+            if (confirmedCount >= needed) {
+              return { ...t, status: "confirmed" };
+            } else if (confirmedCount > 0) {
+              return { ...t, status: "assigned" };
+            } else {
+              return { ...t, status: "open" };
+            }
+          }
+          return t;
+        })
+      );
+
+      return { success: true };
+    },
+    [assignments]
+  );
+
+  // Action: Update Task Status directly
+  const updateTaskStatus = useCallback(
+    (taskId: string, status: Task["status"]): { success: boolean; error?: string } => {
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status } : t)));
+      return { success: true };
+    },
+    []
   );
 
   // Action: Report absence / meld forfall
@@ -475,6 +593,9 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       getGroupMessages,
       assignTaskToPerson,
       reportAbsence,
+      updateAssignmentStatus,
+      removeAssignment,
+      updateTaskStatus,
       updateGroupName,
       updateGroup,
       addPerson,
@@ -512,6 +633,9 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       getGroupMessages,
       assignTaskToPerson,
       reportAbsence,
+      updateAssignmentStatus,
+      removeAssignment,
+      updateTaskStatus,
       updateGroupName,
       updateGroup,
       addPerson,

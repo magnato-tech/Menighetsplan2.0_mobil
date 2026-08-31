@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import {
   useLeaderGroupDetail,
@@ -13,6 +13,7 @@ import {
   ArrowLeft,
   Users,
   Shield,
+  ShieldAlert,
   ShieldCheck,
   Calendar,
   Clock,
@@ -26,6 +27,9 @@ import {
   MessageSquare,
   AlertTriangle,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  UserPlus,
   Sparkles,
 } from "lucide-react";
 
@@ -50,6 +54,7 @@ export const LeaderGroupDetailPage: React.FC = () => {
     addGroupMember,
     removeGroupMember,
     sendMessage,
+    assignTaskToPerson,
   } = useLeaderGroupDetail(groupId || "");
 
   // Editing state for group basic metadata
@@ -70,6 +75,12 @@ export const LeaderGroupDetailPage: React.FC = () => {
   // Add member selector
   const [selectedPersonToAdd, setSelectedPersonToAdd] = useState<string>("");
 
+  // Semester Filter states (Aug 2026 - Jan 2027)
+  const [selectedMonth, setSelectedMonth] = useState<string>("all");
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<"all" | "red" | "yellow" | "green">("all");
+  const [expandedGatheringId, setExpandedGatheringId] = useState<string | null>(null);
+  const [quickAssignTaskId, setQuickAssignTaskId] = useState<string | null>(null);
+
   // New message input
   const [newMessageText, setNewMessageText] = useState("");
   const [messageFeedback, setMessageFeedback] = useState<string | null>(null);
@@ -79,6 +90,30 @@ export const LeaderGroupDetailPage: React.FC = () => {
     setActionFeedback(text);
     setTimeout(() => setActionFeedback(null), 3500);
   };
+
+  const monthOptions = [
+    { id: "all", label: "Alle måneder" },
+    { id: "2026-08", label: "Aug 2026" },
+    { id: "2026-09", label: "Sep 2026" },
+    { id: "2026-10", label: "Okt 2026" },
+    { id: "2026-11", label: "Nov 2026" },
+    { id: "2026-12", label: "Des 2026" },
+    { id: "2027-01", label: "Jan 2027" },
+  ];
+
+  // Filtered gatherings for this group
+  const filteredGroupGatherings = useMemo(() => {
+    return groupGatherings.filter((item) => {
+      if (selectedMonth !== "all") {
+        const itemMonth = item.gathering.startsAt.substring(0, 7);
+        if (itemMonth !== selectedMonth) return false;
+      }
+      if (selectedStatusFilter !== "all") {
+        if (item.staffing.color !== selectedStatusFilter) return false;
+      }
+      return true;
+    });
+  }, [groupGatherings, selectedMonth, selectedStatusFilter]);
 
   // If group not found or unauthorized
   if (!group || !hasAccess) {
@@ -611,68 +646,291 @@ export const LeaderGroupDetailPage: React.FC = () => {
           )}
         </section>
 
-        {/* SAMLINGSOVERSIKT FOR DENNE GRUPPEN */}
+        {/* SEMESTEROVERSIKT / KOMMENDE ARRANGEMENTER FOR DENNE GRUPPEN */}
         <section
           id="section-group-gatherings"
-          className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-3"
+          className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-3.5"
         >
           <div className="flex items-center justify-between">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Kommende samlinger ({groupGatherings.length})</span>
+              <span>Arrangementer dette semesteret</span>
             </h2>
+            <span className="text-[11px] text-slate-400 font-medium">
+              {filteredGroupGatherings.length} av {groupGatherings.length} arrangementer
+            </span>
           </div>
 
-          {groupGatherings.length === 0 ? (
-            <p className="text-xs text-slate-400 italic py-2">
-              Ingen planlagte samlinger for denne gruppen for øyeblikket.
-            </p>
+          {/* Month selector tabs */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+            {monthOptions.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                id={`group-filter-month-${m.id}`}
+                onClick={() => setSelectedMonth(m.id)}
+                className={`px-2.5 py-1.5 rounded-xl font-bold whitespace-nowrap transition-colors cursor-pointer text-xs ${
+                  selectedMonth === m.id
+                    ? "bg-slate-900 text-white shadow-xs"
+                    : "bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/80"
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Status filter buttons */}
+          <div className="flex items-center gap-1.5 overflow-x-auto text-[11px] pb-1">
+            <button
+              type="button"
+              onClick={() => setSelectedStatusFilter("all")}
+              className={`px-2.5 py-1 rounded-lg font-semibold whitespace-nowrap cursor-pointer transition-colors ${
+                selectedStatusFilter === "all"
+                  ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                  : "bg-slate-50 text-slate-500 border border-slate-200"
+              }`}
+            >
+              Alle statuser
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedStatusFilter("red")}
+              className={`px-2.5 py-1 rounded-lg font-semibold whitespace-nowrap cursor-pointer transition-colors flex items-center gap-1 ${
+                selectedStatusFilter === "red"
+                  ? "bg-red-100 text-red-900 border border-red-300"
+                  : "bg-white text-red-600 border border-slate-200"
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-red-500" />
+              <span>Forfall / Vikar</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedStatusFilter("yellow")}
+              className={`px-2.5 py-1 rounded-lg font-semibold whitespace-nowrap cursor-pointer transition-colors flex items-center gap-1 ${
+                selectedStatusFilter === "yellow"
+                  ? "bg-amber-100 text-amber-900 border border-amber-300"
+                  : "bg-white text-amber-600 border border-slate-200"
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-amber-500" />
+              <span>Mangler frivillig</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedStatusFilter("green")}
+              className={`px-2.5 py-1 rounded-lg font-semibold whitespace-nowrap cursor-pointer transition-colors flex items-center gap-1 ${
+                selectedStatusFilter === "green"
+                  ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                  : "bg-white text-emerald-600 border border-slate-200"
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span>Dekket</span>
+            </button>
+          </div>
+
+          {/* Gathering list */}
+          {filteredGroupGatherings.length === 0 ? (
+            <div className="p-6 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 text-xs text-slate-400">
+              Ingen arrangementer matcher valgt måned eller filter for denne gruppen.
+            </div>
           ) : (
-            <div className="space-y-2">
-              {groupGatherings.map(({ gathering, tasks: gTasks, staffing }) => {
+            <div className="space-y-3 pt-1">
+              {filteredGroupGatherings.map((item) => {
+                const { gathering, tasks: gTasks, taskItems, totalNeeded, totalConfirmed, staffing } = item;
                 const isArrangement = gathering.type === "arrangement" || !gathering.type;
+                const isExpanded = expandedGatheringId === gathering.id;
 
                 return (
                   <div
                     key={gathering.id}
-                    id={`gathering-item-${gathering.id}`}
-                    onClick={() => navigate(`/leder/samling/${gathering.id}`)}
-                    className="p-3 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-slate-100 flex items-center justify-between gap-2 cursor-pointer transition-colors group"
+                    id={`group-gathering-card-${gathering.id}`}
+                    className={`p-3.5 bg-slate-50 rounded-2xl border transition-all space-y-3 ${
+                      staffing.color === "red"
+                        ? "border-red-200 ring-1 ring-red-100 bg-red-50/20"
+                        : staffing.color === "yellow"
+                        ? "border-amber-200 bg-amber-50/20"
+                        : "border-slate-200"
+                    }`}
                   >
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-slate-800 group-hover:text-emerald-800 transition-colors">
-                          {gathering.title}
-                        </span>
+                    {/* Header Row */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="text-xs font-bold text-slate-900">{gathering.title}</h3>
+                          <span
+                            className={`text-[9px] font-bold px-1.5 py-0.2 rounded uppercase ${
+                              isArrangement
+                                ? "bg-blue-50 text-blue-700 border border-blue-100"
+                                : "bg-purple-50 text-purple-700 border border-purple-100"
+                            }`}
+                          >
+                            {isArrangement ? "Arrangement" : "Gruppesamling"}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+                          <span className="flex items-center gap-1 font-semibold text-slate-700">
+                            <Clock className="w-3.5 h-3.5 text-slate-400" />
+                            {formatNorwegianDateTime(gathering.startsAt)}
+                          </span>
+                          {gathering.location && (
+                            <>
+                              <span className="text-slate-300">•</span>
+                              <span className="flex items-center gap-1">
+                                <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                                {gathering.location}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Staffing Pill */}
+                      <div className="text-right space-y-0.5">
                         <span
-                          className={`text-[9px] font-bold px-1.5 py-0.2 rounded uppercase ${
-                            isArrangement
-                              ? "bg-blue-50 text-blue-700 border border-blue-100"
-                              : "bg-purple-50 text-purple-700 border border-purple-100"
+                          className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            staffing.color === "red"
+                              ? "bg-red-100 text-red-700"
+                              : staffing.color === "yellow"
+                              ? "bg-amber-100 text-amber-800"
+                              : "bg-emerald-100 text-emerald-800"
                           }`}
                         >
-                          {isArrangement ? "Arrangement" : "Gruppesamling"}
+                          {staffing.badgeText}
                         </span>
+                        <p className="text-[10px] text-slate-400 font-medium">
+                          {totalConfirmed} av {totalNeeded} dekket
+                        </p>
                       </div>
-                      <p className="text-[11px] text-slate-500 font-medium">
-                        {formatNorwegianDateTime(gathering.startsAt)}
-                      </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          staffing.color === "red"
-                            ? "bg-red-100 text-red-700"
-                            : staffing.color === "yellow"
-                            ? "bg-amber-100 text-amber-800"
-                            : "bg-emerald-100 text-emerald-800"
-                        }`}
+                    {/* Tasks Summary / Expander toggle */}
+                    <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between">
+                      <button
+                        type="button"
+                        id={`btn-toggle-tasks-${gathering.id}`}
+                        onClick={() => setExpandedGatheringId(isExpanded ? null : gathering.id)}
+                        className="text-xs font-semibold text-slate-700 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
                       >
-                        {staffing.badgeText}
-                      </span>
-                      <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
+                        <span>{gTasks.length} {gTasks.length === 1 ? "oppgave" : "oppgaver"}</span>
+                        {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-slate-500" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-500" />}
+                      </button>
+
+                      <button
+                        type="button"
+                        id={`btn-open-gathering-detail-${gathering.id}`}
+                        onClick={() => navigate(`/leder/samling/${gathering.id}`)}
+                        className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>Åpne arrangementsdetalj</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
                     </div>
+
+                    {/* Expanded Task list with assigned persons & direct action */}
+                    {isExpanded && (
+                      <div className="pt-2 space-y-2 border-t border-slate-200/60 animate-in fade-in duration-150">
+                        {taskItems.map(({ task, assignedPersons, confirmedCount, neededCount, isFullyCovered: taskCovered, hasForfall: taskForfall }) => (
+                          <div
+                            key={task.id}
+                            id={`group-gathering-task-${task.id}`}
+                            className="p-2.5 bg-white rounded-xl border border-slate-200 text-xs space-y-2"
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <div>
+                                <span className="font-bold text-slate-800">{task.title}</span>
+                                <span className="text-[11px] text-slate-500 ml-2">
+                                  ({confirmedCount}/{neededCount} dekket)
+                                </span>
+                              </div>
+                              <span
+                                className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                                  taskForfall
+                                    ? "bg-red-100 text-red-700"
+                                    : taskCovered
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : "bg-amber-100 text-amber-800"
+                                }`}
+                              >
+                                {taskForfall ? "Forfall" : taskCovered ? "Dekket" : "Mangler"}
+                              </span>
+                            </div>
+
+                            {/* Assigned persons tags */}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {assignedPersons.length > 0 ? (
+                                assignedPersons.map(({ assignment, person, statusLabel, response }) => (
+                                  <span
+                                    key={assignment.id}
+                                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium ${
+                                      response === "confirmed"
+                                        ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                                        : response === "withdrawn"
+                                        ? "bg-red-50 text-red-800 border border-red-200 line-through"
+                                        : "bg-amber-50 text-amber-800 border border-amber-200"
+                                    }`}
+                                  >
+                                    <span>{person?.name || "Ukjent"}</span>
+                                    <span className="text-[9px] opacity-75">({statusLabel})</span>
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-[11px] text-slate-400 italic">Ingen tildelt</span>
+                              )}
+                            </div>
+
+                            {/* Quick Assign action button */}
+                            {!taskCovered && (
+                              <div className="pt-1 flex items-center justify-between">
+                                <button
+                                  type="button"
+                                  id={`btn-quick-assign-${task.id}`}
+                                  onClick={() => setQuickAssignTaskId(quickAssignTaskId === task.id ? null : task.id)}
+                                  className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
+                                >
+                                  <UserPlus className="w-3.5 h-3.5" />
+                                  <span>Tildel fra gruppen</span>
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Quick Assign Dropdown Drawer */}
+                            {quickAssignTaskId === task.id && (
+                              <div className="p-2.5 bg-slate-900 text-white rounded-xl space-y-2 mt-1">
+                                <span className="text-[10px] uppercase font-bold text-amber-400 block">
+                                  Velg medlem for direkte tildeling:
+                                </span>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                                  {members.map((m) => (
+                                    <button
+                                      key={m.id}
+                                      type="button"
+                                      id={`btn-do-quick-assign-${task.id}-${m.id}`}
+                                      onClick={async () => {
+                                        const res = await assignTaskToPerson(task.id, m.id);
+                                        if (res.success) {
+                                          setQuickAssignTaskId(null);
+                                          showToast(`Oppgaven ble direkte tildelt ${m.name}!`);
+                                        } else {
+                                          showToast(res.error || "Kunne ikke tildele oppgaven.");
+                                        }
+                                      }}
+                                      className="p-1.5 bg-slate-800 hover:bg-slate-700 text-left rounded-lg text-xs font-medium text-slate-200 flex items-center justify-between cursor-pointer"
+                                    >
+                                      <span>{m.name}</span>
+                                      <UserPlus className="w-3 h-3 text-emerald-400" />
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
