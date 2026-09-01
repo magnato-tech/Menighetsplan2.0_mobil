@@ -9,6 +9,7 @@ import {
 import { useMockData } from "../context/MockDataContext";
 import { ActionCard } from "../components/ActionCard";
 import { UserQuickSwitcherBar } from "../components/UserSwitcher";
+import { HusfellesskapView } from "../components/HusfellesskapView";
 import { Task, GroupMessage } from "../types";
 import { CheckCircle2, Info, MessageSquare, Send } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -112,6 +113,11 @@ export const MyPage: React.FC = () => {
             </button>
           </div>
         )}
+
+        {/* SEKSJON: Mitt husfellesskap */}
+        <section id="section-mitt-husfellesskap">
+          <HusfellesskapView />
+        </section>
 
         {/* SEKSJON 1: Mine oppgaver */}
         <section id="section-mine-oppgaver">

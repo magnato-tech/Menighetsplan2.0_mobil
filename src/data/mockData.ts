@@ -1,4 +1,4 @@
-import { Person, Group, Gathering, Task, Assignment, GroupMessage } from "../types";
+import { Person, Group, Gathering, Task, Assignment, GroupMessage, GatheringAttendance } from "../types";
 
 export const initialPersons: Person[] = [
   {
@@ -71,9 +71,64 @@ export const initialGroups: Group[] = [
       frequency: "annenhver uke",
     },
   },
+  {
+    id: "group-hus-1",
+    name: "Husfellesskap Sentrum",
+    category: "husgruppe",
+    memberIds: ["person-1", "person-2", "person-3", "person-4"],
+    leaderIds: ["person-2"], // Ola Hansen (Leder)
+    deputyLeaderIds: ["person-1"], // Kari Nordmann (Nestleder)
+    memberJoinedAt: {
+      "person-1": "2026-08-01T00:00:00.000Z",
+      "person-2": "2026-08-01T00:00:00.000Z",
+      "person-3": "2026-08-01T00:00:00.000Z",
+      "person-4": "2026-08-01T00:00:00.000Z",
+    },
+    notificationPreferences: {
+      "person-1": true,
+      "person-2": true,
+      "person-3": true,
+      "person-4": true,
+    },
+    meetingSchedule: {
+      weekday: "Onsdag",
+      time: "19:30",
+      frequency: "annenhver uke",
+    },
+  },
 ];
 
 export const initialGatherings: Gathering[] = [
+  {
+    id: "gathering-hus-1",
+    groupId: "group-hus-1",
+    title: "Husfellesskap hos Jonas",
+    startsAt: "2026-09-09T19:30:00.000Z",
+    location: "Hos Jonas Lie (Skogveien 4)",
+    type: "gruppesamling",
+    theme: "Nåde og tilgivelse i hverdagen",
+    bibleText: "Kolosserne 3, 12-17",
+    hostPersonId: "person-4",
+    invitationSent: true,
+    invitationSentAt: "2026-09-01T09:00:00.000Z",
+    programSchedule: [
+      { time: "19:30", title: "Kaffe, te og prat", description: "Enkel bevertning og velkomst" },
+      { time: "20:00", title: "Bibeltekst og samtale", description: "Kolosserne 3, 12-17" },
+      { time: "21:00", title: "Bønn for hverandre og kveldsavslutning" },
+    ],
+  },
+  {
+    id: "gathering-hus-2",
+    groupId: "group-hus-1",
+    title: "Husfellesskap hos Ingrid",
+    startsAt: "2026-09-23T19:30:00.000Z",
+    location: "Hos Ingrid Berg (Parkveien 12)",
+    type: "gruppesamling",
+    theme: "Bønn som forvandler",
+    bibleText: "Filipperne 4, 4-9",
+    hostPersonId: "person-3",
+    invitationSent: false,
+  },
   {
     id: "gathering-aug-1",
     groupId: "group-lyd",
@@ -312,6 +367,31 @@ export const initialGroupMessages: GroupMessage[] = [
     senderName: "Ola Hansen",
     content: "Vi har en teknisk opplæringskveld tirsdag 22. september kl. 19:00. Vel møtt!",
     createdAt: "2026-09-02T14:30:00.000Z",
+  },
+  {
+    id: "msg-hus-1",
+    groupId: "group-hus-1",
+    senderPersonId: "person-2",
+    senderName: "Ola Hansen",
+    content: "Gleder meg til høstsemesteret i husfellesskapet vårt! Vi starter opp hos Jonas onsdag 9. september kl. 19:30.",
+    createdAt: "2026-08-28T18:00:00.000Z",
+  },
+  {
+    id: "msg-hus-2",
+    groupId: "group-hus-1",
+    senderPersonId: "person-4",
+    senderName: "Jonas Lie",
+    content: "Velkommen hjem til oss! Jeg setter over kaffe og te. Her er en fin sang vi kan lytte til som forberedelse til temaet: https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    createdAt: "2026-08-29T10:15:00.000Z",
+  },
+  {
+    id: "msg-hus-3",
+    groupId: "group-hus-1",
+    senderPersonId: "person-3",
+    senderName: "Ingrid Berg",
+    content: "Gleder meg! Her er et bilde fra forrige semesters avslutningstur i skogen.",
+    imageUrl: "https://images.unsplash.com/photo-1511632765486-a01980e01a18?auto=format&fit=crop&w=800&q=80",
+    createdAt: "2026-08-30T19:40:00.000Z",
   },
 ];
 
@@ -655,4 +735,29 @@ export const initialAssignments: Assignment[] = [
     personId: "person-2", // Ola
     response: "confirmed",
   },
+];
+
+export const initialGatheringAttendances: GatheringAttendance[] = [
+  {
+    id: "att-1",
+    gatheringId: "gathering-hus-1",
+    personId: "person-2", // Ola Hansen (Leder)
+    status: "attending",
+    updatedAt: "2026-09-01T10:00:00.000Z",
+  },
+  {
+    id: "att-2",
+    gatheringId: "gathering-hus-1",
+    personId: "person-4", // Jonas Lie (Host)
+    status: "attending",
+    updatedAt: "2026-09-01T10:05:00.000Z",
+  },
+  {
+    id: "att-3",
+    gatheringId: "gathering-hus-1",
+    personId: "person-3", // Ingrid Berg
+    status: "declined",
+    updatedAt: "2026-09-01T11:00:00.000Z",
+  },
+  // person-1 (Kari Nordmann) has not responded yet (ikke svart)
 ];

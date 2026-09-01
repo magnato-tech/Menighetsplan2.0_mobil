@@ -24,6 +24,8 @@ export interface Group {
   leaderIds: string[];
   deputyLeaderIds?: string[];
   meetingSchedule?: MeetingSchedule;
+  memberJoinedAt?: Record<string, string>; // ISO date when person joined group
+  notificationPreferences?: Record<string, boolean>; // personId -> true/false
 }
 
 export interface ProgramItem {
@@ -42,7 +44,20 @@ export interface Gathering {
   startsAt: string; // ISO date
   location?: string;
   type?: "arrangement" | "gruppesamling";
+  theme?: string;
+  bibleText?: string;
+  hostPersonId?: string;
+  invitationSent?: boolean;
+  invitationSentAt?: string;
   programSchedule?: ProgramItem[];
+}
+
+export interface GatheringAttendance {
+  id: string;
+  gatheringId: string;
+  personId: string;
+  status: "attending" | "declined"; // "attending" = KOMMER, "declined" = KOMMER IKKE
+  updatedAt?: string;
 }
 
 export interface GroupMessage {
@@ -51,6 +66,7 @@ export interface GroupMessage {
   senderPersonId: string;
   senderName: string;
   content: string;
+  imageUrl?: string; // Optional attached photo
   createdAt: string; // ISO date
 }
 

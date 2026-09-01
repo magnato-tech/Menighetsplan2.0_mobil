@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useMemo, useCallback } from "react";
-import { Person, Group, Gathering, Task, Assignment, GroupMessage } from "../types";
+import { Person, Group, Gathering, Task, Assignment, GroupMessage, GatheringAttendance } from "../types";
 import {
   initialPersons,
   initialGroups,
@@ -7,6 +7,7 @@ import {
   initialTasks,
   initialAssignments,
   initialGroupMessages,
+  initialGatheringAttendances,
 } from "../data/mockData";
 
 export interface ModuleConfig {
@@ -25,6 +26,7 @@ export interface MockDataContextType {
   tasks: Task[];
   assignments: Assignment[];
   groupMessages: GroupMessage[];
+  attendances: GatheringAttendance[];
 
   // Module configuration
   moduleConfig: ModuleConfig;
@@ -43,9 +45,28 @@ export interface MockDataContextType {
   getAllAssignmentsForTask: (taskId: string) => Assignment[];
   getUserGroups: (personId: string) => Group[];
   isPersonInGroup: (personId: string, groupId: string) => boolean;
-  getGroupMessages: (groupId: string) => GroupMessage[];
+  getGroupMessages: (groupId: string, personId?: string) => GroupMessage[];
+  getGatheringAttendances: (gatheringId: string) => GatheringAttendance[];
+  getPersonAttendance: (gatheringId: string, personId: string) => GatheringAttendance | undefined;
+  getUpcomingGatheringForGroup: (groupId: string) => Gathering | undefined;
+  getGatheringsForGroup: (groupId: string) => Gathering[];
+  getGroupNotificationsEnabled: (groupId: string, personId?: string) => boolean;
 
   // Actions
+  createGathering: (data: {
+    groupId: string;
+    title: string;
+    startsAt: string;
+    location?: string;
+    type?: "arrangement" | "gruppesamling";
+    theme?: string;
+    bibleText?: string;
+    hostPersonId?: string;
+    sendInvitationImmediately?: boolean;
+  }) => { success: boolean; gathering?: Gathering; error?: string };
+  updateGathering: (gatheringId: string, updates: Partial<Gathering>) => { success: boolean; gathering?: Gathering; error?: string };
+  deleteGathering: (gatheringId: string) => { success: boolean; error?: string };
+  sendGatheringInvitation: (gatheringId: string) => { success: boolean; error?: string };
   assignTaskToPerson: (taskId: string, personId: string, responseStatus?: "confirmed" | "pending") => Promise<{ success: boolean; error?: string }>;
   reportAbsence: (taskId: string, personId: string) => Promise<{ success: boolean; error?: string }>;
   updateAssignmentStatus: (assignmentId: string, response: "confirmed" | "pending" | "declined" | "withdrawn") => { success: boolean; error?: string };
@@ -62,7 +83,10 @@ export interface MockDataContextType {
   updateTask: (taskId: string, updates: Partial<Task>) => { success: boolean; error?: string };
   updateTaskInstruction: (taskId: string, instruction: string) => { success: boolean; error?: string };
   updateTaskNeededCount: (taskId: string, neededCount: number | undefined) => { success: boolean; error?: string };
-  sendGroupMessage: (groupId: string, content: string) => { success: boolean; message?: GroupMessage; error?: string };
+  sendGroupMessage: (groupId: string, content: string, imageUrl?: string) => { success: boolean; message?: GroupMessage; error?: string };
+  deleteGroupMessage: (messageId: string, personId?: string) => { success: boolean; error?: string };
+  toggleGroupNotifications: (groupId: string, personId?: string, forceState?: boolean) => { success: boolean; enabled: boolean };
+  respondToGathering: (gatheringId: string, personId: string, status: "attending" | "declined") => Promise<{ success: boolean; error?: string }>;
 }
 
 const MockDataContext = createContext<MockDataContextType | undefined>(undefined);
@@ -70,10 +94,11 @@ const MockDataContext = createContext<MockDataContextType | undefined>(undefined
 export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [persons, setPersons] = useState<Person[]>(initialPersons);
   const [groups, setGroups] = useState<Group[]>(initialGroups);
-  const [gatherings] = useState<Gathering[]>(initialGatherings);
+  const [gatherings, setGatherings] = useState<Gathering[]>(initialGatherings);
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [assignments, setAssignments] = useState<Assignment[]>(initialAssignments);
   const [groupMessages, setGroupMessages] = useState<GroupMessage[]>(initialGroupMessages);
+  const [attendances, setAttendances] = useState<GatheringAttendance[]>(initialGatheringAttendances);
 
   // Module configuration state - default is both 'off'
   const [moduleConfig, setModuleConfig] = useState<ModuleConfig>({
@@ -469,6 +494,14 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             return {
               ...g,
               memberIds: [...g.memberIds, personId],
+              memberJoinedAt: {
+                ...(g.memberJoinedAt || {}),
+                [personId]: new Date().toISOString(),
+              },
+              notificationPreferences: {
+                ...(g.notificationPreferences || {}),
+                [personId]: true,
+              },
             };
           }
           return g;
@@ -593,32 +626,286 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Group Messages
   const getGroupMessages = useCallback(
-    (groupId: string): GroupMessage[] => {
-      return groupMessages.filter((m) => m.groupId === groupId);
+    (groupId: string, personId?: string): GroupMessage[] => {
+      const targetPersonId = personId || currentUser.id;
+      const targetGroup = groups.find((g) => g.id === groupId);
+      if (!targetGroup) return [];
+
+      // Access control check: user must be member, leader, or deputy leader of this specific group
+      const isMember =
+        targetGroup.memberIds.includes(targetPersonId) ||
+        targetGroup.leaderIds.includes(targetPersonId) ||
+        (targetGroup.deputyLeaderIds ? targetGroup.deputyLeaderIds.includes(targetPersonId) : false);
+
+      if (!isMember) {
+        // Not a member: strictly no access to the group's chat
+        return [];
+      }
+
+      // History constraint: New members can only see messages sent after their join date
+      const joinedAtStr = targetGroup.memberJoinedAt?.[targetPersonId];
+      const joinedAtTime = joinedAtStr ? new Date(joinedAtStr).getTime() : 0;
+
+      const groupMsgs = groupMessages.filter((m) => {
+        if (m.groupId !== groupId) return false;
+        const msgTime = new Date(m.createdAt).getTime();
+        return msgTime >= joinedAtTime;
+      });
+
+      // Sort chronologically (oldest first)
+      return [...groupMsgs].sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
     },
-    [groupMessages]
+    [groupMessages, groups, currentUser.id]
   );
 
   const sendGroupMessage = useCallback(
-    (groupId: string, content: string): { success: boolean; message?: GroupMessage; error?: string } => {
+    (
+      groupId: string,
+      content: string,
+      imageUrl?: string
+    ): { success: boolean; message?: GroupMessage; error?: string } => {
       const trimmed = content.trim();
-      if (!trimmed) {
+      if (!trimmed && !imageUrl) {
         return { success: false, error: "Meldingsteksten kan ikke være tom." };
       }
 
+      const targetGroup = groups.find((g) => g.id === groupId);
+      if (!targetGroup) {
+        return { success: false, error: "Gruppen ble ikke funnet." };
+      }
+
+      const isMember =
+        targetGroup.memberIds.includes(currentUser.id) ||
+        targetGroup.leaderIds.includes(currentUser.id) ||
+        (targetGroup.deputyLeaderIds ? targetGroup.deputyLeaderIds.includes(currentUser.id) : false);
+
+      if (!isMember) {
+        return { success: false, error: "Du må være medlem av gruppen for å skrive i chatten." };
+      }
+
       const newMessage: GroupMessage = {
-        id: `msg-${Date.now()}`,
+        id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
         groupId,
         senderPersonId: currentUser.id,
         senderName: currentUser.name,
         content: trimmed,
+        imageUrl: imageUrl || undefined,
         createdAt: new Date().toISOString(),
       };
 
-      setGroupMessages((prev) => [newMessage, ...prev]);
+      setGroupMessages((prev) => [...prev, newMessage]);
       return { success: true, message: newMessage };
     },
-    [currentUser]
+    [currentUser, groups]
+  );
+
+  const deleteGroupMessage = useCallback(
+    (messageId: string, personId?: string): { success: boolean; error?: string } => {
+      const targetPersonId = personId || currentUser.id;
+      const targetMsg = groupMessages.find((m) => m.id === messageId);
+      if (!targetMsg) {
+        return { success: false, error: "Meldingen ble ikke funnet." };
+      }
+
+      // STRICT PERMISSION: only author can delete own message (NO moderator overrides)
+      if (targetMsg.senderPersonId !== targetPersonId) {
+        return { success: false, error: "Du kan kun slette dine egne meldinger." };
+      }
+
+      setGroupMessages((prev) => prev.filter((m) => m.id !== messageId));
+      return { success: true };
+    },
+    [groupMessages, currentUser.id]
+  );
+
+  const toggleGroupNotifications = useCallback(
+    (groupId: string, personId?: string, forceState?: boolean): { success: boolean; enabled: boolean } => {
+      const targetPersonId = personId || currentUser.id;
+      let newEnabled = true;
+
+      setGroups((prev) =>
+        prev.map((g) => {
+          if (g.id === groupId) {
+            const currentPrefs = g.notificationPreferences || {};
+            const currentVal = currentPrefs[targetPersonId] ?? true;
+            newEnabled = forceState !== undefined ? forceState : !currentVal;
+            return {
+              ...g,
+              notificationPreferences: {
+                ...currentPrefs,
+                [targetPersonId]: newEnabled,
+              },
+            };
+          }
+          return g;
+        })
+      );
+
+      return { success: true, enabled: newEnabled };
+    },
+    [currentUser.id]
+  );
+
+  const getGroupNotificationsEnabled = useCallback(
+    (groupId: string, personId?: string): boolean => {
+      const targetPersonId = personId || currentUser.id;
+      const targetGroup = groups.find((g) => g.id === groupId);
+      if (!targetGroup) return true;
+      return targetGroup.notificationPreferences?.[targetPersonId] ?? true;
+    },
+    [groups, currentUser.id]
+  );
+
+  const getGatheringAttendances = useCallback(
+    (gatheringId: string): GatheringAttendance[] => {
+      return attendances.filter((a) => a.gatheringId === gatheringId);
+    },
+    [attendances]
+  );
+
+  const getPersonAttendance = useCallback(
+    (gatheringId: string, personId: string): GatheringAttendance | undefined => {
+      return attendances.find((a) => a.gatheringId === gatheringId && a.personId === personId);
+    },
+    [attendances]
+  );
+
+  const getUpcomingGatheringForGroup = useCallback(
+    (groupId: string): Gathering | undefined => {
+      const groupGatherings = gatherings.filter((g) => g.groupId === groupId);
+      const sorted = [...groupGatherings].sort(
+        (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()
+      );
+      return sorted[0];
+    },
+    [gatherings]
+  );
+
+  const getGatheringsForGroup = useCallback(
+    (groupId: string): Gathering[] => {
+      return gatherings
+        .filter((g) => g.groupId === groupId)
+        .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+    },
+    [gatherings]
+  );
+
+  const createGathering = useCallback(
+    (data: {
+      groupId: string;
+      title: string;
+      startsAt: string;
+      location?: string;
+      type?: "arrangement" | "gruppesamling";
+      theme?: string;
+      bibleText?: string;
+      hostPersonId?: string;
+      sendInvitationImmediately?: boolean;
+    }): { success: boolean; gathering?: Gathering; error?: string } => {
+      if (!data.groupId || !data.title || !data.startsAt) {
+        return { success: false, error: "Mangler obligatoriske felt (gruppe, tittel, dato)" };
+      }
+      const newGathering: Gathering = {
+        id: `gathering-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        groupId: data.groupId,
+        title: data.title,
+        startsAt: data.startsAt,
+        location: data.location,
+        type: data.type || "gruppesamling",
+        theme: data.theme,
+        bibleText: data.bibleText,
+        hostPersonId: data.hostPersonId,
+        invitationSent: !!data.sendInvitationImmediately,
+        invitationSentAt: data.sendInvitationImmediately ? new Date().toISOString() : undefined,
+      };
+      setGatherings((prev) => [...prev, newGathering]);
+      return { success: true, gathering: newGathering };
+    },
+    []
+  );
+
+  const updateGathering = useCallback(
+    (
+      gatheringId: string,
+      updates: Partial<Gathering>
+    ): { success: boolean; gathering?: Gathering; error?: string } => {
+      let updatedGathering: Gathering | undefined;
+      setGatherings((prev) =>
+        prev.map((g) => {
+          if (g.id === gatheringId) {
+            updatedGathering = { ...g, ...updates };
+            return updatedGathering;
+          }
+          return g;
+        })
+      );
+      if (!updatedGathering) {
+        return { success: false, error: "Samling ikke funnet" };
+      }
+      return { success: true, gathering: updatedGathering };
+    },
+    []
+  );
+
+  const deleteGathering = useCallback((gatheringId: string): { success: boolean; error?: string } => {
+    setGatherings((prev) => prev.filter((g) => g.id !== gatheringId));
+    setAttendances((prev) => prev.filter((a) => a.gatheringId !== gatheringId));
+    return { success: true };
+  }, []);
+
+  const sendGatheringInvitation = useCallback(
+    (gatheringId: string): { success: boolean; error?: string } => {
+      setGatherings((prev) =>
+        prev.map((g) => {
+          if (g.id === gatheringId) {
+            return {
+              ...g,
+              invitationSent: true,
+              invitationSentAt: new Date().toISOString(),
+            };
+          }
+          return g;
+        })
+      );
+      return { success: true };
+    },
+    []
+  );
+
+  const respondToGathering = useCallback(
+    async (
+      gatheringId: string,
+      personId: string,
+      status: "attending" | "declined"
+    ): Promise<{ success: boolean; error?: string }> => {
+      setAttendances((prev) => {
+        const existingIndex = prev.findIndex(
+          (a) => a.gatheringId === gatheringId && a.personId === personId
+        );
+        if (existingIndex >= 0) {
+          const updated = [...prev];
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            status,
+            updatedAt: new Date().toISOString(),
+          };
+          return updated;
+        } else {
+          const newAtt: GatheringAttendance = {
+            id: `att-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+            gatheringId,
+            personId,
+            status,
+            updatedAt: new Date().toISOString(),
+          };
+          return [...prev, newAtt];
+        }
+      });
+      return { success: true };
+    },
+    []
   );
 
   const contextValue = useMemo(
@@ -632,6 +919,7 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       tasks,
       assignments,
       groupMessages,
+      attendances,
       moduleConfig,
       setModuleStatus,
       toggleKalender,
@@ -647,6 +935,14 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       getUserGroups,
       isPersonInGroup,
       getGroupMessages,
+      getGatheringAttendances,
+      getPersonAttendance,
+      getUpcomingGatheringForGroup,
+      getGatheringsForGroup,
+      createGathering,
+      updateGathering,
+      deleteGathering,
+      sendGatheringInvitation,
       assignTaskToPerson,
       reportAbsence,
       updateAssignmentStatus,
@@ -664,6 +960,10 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       updateTaskInstruction,
       updateTaskNeededCount,
       sendGroupMessage,
+      deleteGroupMessage,
+      toggleGroupNotifications,
+      getGroupNotificationsEnabled,
+      respondToGathering,
     }),
     [
       currentUser,
@@ -674,6 +974,7 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       tasks,
       assignments,
       groupMessages,
+      attendances,
       moduleConfig,
       setModuleStatus,
       toggleKalender,
@@ -689,6 +990,14 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       getUserGroups,
       isPersonInGroup,
       getGroupMessages,
+      getGatheringAttendances,
+      getPersonAttendance,
+      getUpcomingGatheringForGroup,
+      getGatheringsForGroup,
+      createGathering,
+      updateGathering,
+      deleteGathering,
+      sendGatheringInvitation,
       assignTaskToPerson,
       reportAbsence,
       updateAssignmentStatus,
@@ -706,6 +1015,10 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       updateTaskInstruction,
       updateTaskNeededCount,
       sendGroupMessage,
+      deleteGroupMessage,
+      toggleGroupNotifications,
+      getGroupNotificationsEnabled,
+      respondToGathering,
     ]
   );
 

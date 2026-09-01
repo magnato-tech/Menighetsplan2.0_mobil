@@ -14,6 +14,7 @@ import { AdminGatheringDetailPage } from "./pages/AdminGatheringDetailPage";
 import { AdminTaskDetailPage } from "./pages/AdminTaskDetailPage";
 import { AdminSettingsPage } from "./pages/AdminSettingsPage";
 import { ModulePlaceholderPage } from "./pages/ModulePlaceholderPage";
+import { HusfellesskapPage } from "./pages/HusfellesskapPage";
 
 export default function App() {
   return (
@@ -43,6 +44,8 @@ export default function App() {
                 element={<ModulePlaceholderPage module="meldinger" />}
               />
               <Route path="/oppgave/:taskId" element={<TaskDetailPage />} />
+              <Route path="/husfellesskap" element={<HusfellesskapPage />} />
+              <Route path="/husfellesskap/:groupId" element={<HusfellesskapPage />} />
               {/* Fallback to home */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

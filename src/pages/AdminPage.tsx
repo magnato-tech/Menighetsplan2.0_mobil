@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   useAdminDashboard,
@@ -70,6 +70,23 @@ export const AdminPage: React.FC = () => {
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [editNameInput, setEditNameInput] = useState<string>("");
   const [feedback, setFeedback] = useState<{ text: string; type: "success" | "error" } | null>(null);
+
+  // Group Category Filter state: 'all' | 'husgruppe' | 'tjenestegruppe'
+  const [groupCategoryFilter, setGroupCategoryFilter] = useState<"all" | "husgruppe" | "tjenestegruppe">("all");
+
+  const husGroupsCount = useMemo(
+    () => adminGroups.filter((g) => g.group.category === "husgruppe").length,
+    [adminGroups]
+  );
+  const tjenesteGroupsCount = useMemo(
+    () => adminGroups.filter((g) => (g.group.category || "tjenestegruppe") === "tjenestegruppe").length,
+    [adminGroups]
+  );
+
+  const filteredAdminGroups = useMemo(() => {
+    if (groupCategoryFilter === "all") return adminGroups;
+    return adminGroups.filter((g) => (g.group.category || "tjenestegruppe") === groupCategoryFilter);
+  }, [adminGroups, groupCategoryFilter]);
 
   // New Person Form States
   const [showAddPersonForm, setShowAddPersonForm] = useState<boolean>(false);
@@ -278,11 +295,67 @@ export const AdminPage: React.FC = () => {
                 Grupper & administrasjon
               </h3>
               <span className="text-[11px] text-slate-400 font-medium">
-                Klikk på et gruppekort for detaljer
+                {filteredAdminGroups.length} av {adminGroups.length} grupper
               </span>
             </div>
 
-            {adminGroups.map(({ group, leaders, deputyLeaders, members, tasksCount }) => {
+            {/* Kategori-filter for admin: Alle | Husfellesskap | Tjenestegrupper */}
+            <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl">
+              <button
+                type="button"
+                id="btn-admin-filter-group-all"
+                onClick={() => setGroupCategoryFilter("all")}
+                className={`flex-1 py-1.5 px-2.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  groupCategoryFilter === "all"
+                    ? "bg-white text-indigo-900 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <span>Alle</span>
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-slate-200/80 text-slate-700">
+                  {adminGroups.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                id="btn-admin-filter-group-husgruppe"
+                onClick={() => setGroupCategoryFilter("husgruppe")}
+                className={`flex-1 py-1.5 px-2.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  groupCategoryFilter === "husgruppe"
+                    ? "bg-white text-emerald-900 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <span>Husfellesskap</span>
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800">
+                  {husGroupsCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                id="btn-admin-filter-group-tjenestegruppe"
+                onClick={() => setGroupCategoryFilter("tjenestegruppe")}
+                className={`flex-1 py-1.5 px-2.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  groupCategoryFilter === "tjenestegruppe"
+                    ? "bg-white text-indigo-900 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <span>Tjenestegrupper</span>
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-800">
+                  {tjenesteGroupsCount}
+                </span>
+              </button>
+            </div>
+
+            {filteredAdminGroups.length === 0 ? (
+              <div className="p-8 text-center bg-white rounded-2xl border border-slate-200 text-xs text-slate-400">
+                Ingen grupper matcher valgt kategori.
+              </div>
+            ) : (
+              filteredAdminGroups.map(({ group, leaders, deputyLeaders, members, tasksCount }) => {
               const categoryLabel =
                 GROUP_CATEGORIES.find((c) => c.id === (group.category || "tjenestegruppe"))?.label ||
                 "Tjenestegruppe";
@@ -419,7 +492,7 @@ export const AdminPage: React.FC = () => {
                   </div>
                 </div>
               );
-            })}
+            }))}
           </div>
         )}
 
@@ -656,17 +729,11 @@ export const AdminPage: React.FC = () => {
                     </p>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        staffing.color === "red"
-                          ? "bg-red-100 text-red-700"
-                          : staffing.color === "yellow"
-                          ? "bg-amber-100 text-amber-800"
-                          : "bg-emerald-100 text-emerald-800"
-                      }`}
-                    >
-                      {staffing.badgeText}
-                    </span>
+                    {missingStaffingCount > 0 && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+                        Mangler {missingStaffingCount}
+                      </span>
+                    )}
                     <Link
                       to={`/admin/samling/${gathering.id}`}
                       id={`btn-open-gathering-${gathering.id}`}
@@ -675,22 +742,6 @@ export const AdminPage: React.FC = () => {
                       Åpne samling
                       <ChevronRight className="w-3 h-3" />
                     </Link>
-                  </div>
-                </div>
-
-                {/* Staffing summary metrics */}
-                <div className="grid grid-cols-3 gap-2 text-center text-xs pt-1">
-                  <div className="p-1.5 bg-slate-50 rounded-xl border border-slate-100">
-                    <span className="text-[10px] text-slate-400 block">Oppgaver</span>
-                    <span className="font-bold text-slate-800">{totalTasks}</span>
-                  </div>
-                  <div className="p-1.5 bg-emerald-50 rounded-xl border border-emerald-100">
-                    <span className="text-[10px] text-emerald-600 block">Dekket</span>
-                    <span className="font-bold text-emerald-800">{coveredTasksCount}</span>
-                  </div>
-                  <div className={`p-1.5 rounded-xl border ${missingStaffingCount > 0 ? "bg-red-50 border-red-100 text-red-800" : "bg-slate-50 border-slate-100 text-slate-700"}`}>
-                    <span className="text-[10px] block opacity-80">Mangler</span>
-                    <span className="font-bold">{missingStaffingCount}</span>
                   </div>
                 </div>
 

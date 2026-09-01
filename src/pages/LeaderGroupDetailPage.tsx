@@ -8,6 +8,8 @@ import {
   WEEKDAYS,
 } from "../hooks/useAppHooks";
 import { UserQuickSwitcherBar } from "../components/UserSwitcher";
+import { HusfellesskapView } from "../components/HusfellesskapView";
+import { GroupChat } from "../components/GroupChat";
 import { GroupCategory, MeetingSchedule } from "../types";
 import {
   ArrowLeft,
@@ -76,6 +78,9 @@ export const LeaderGroupDetailPage: React.FC = () => {
 
   // Add member selector
   const [selectedPersonToAdd, setSelectedPersonToAdd] = useState<string>("");
+
+  // Room Tab for non-husgruppe: 'aktiviteter' | 'chat' | 'medlemmer'
+  const [activeRoomTab, setActiveRoomTab] = useState<"aktiviteter" | "chat" | "medlemmer">("aktiviteter");
 
   // Semester Filter states (Aug 2026 - Jan 2027)
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
@@ -308,6 +313,44 @@ export const LeaderGroupDetailPage: React.FC = () => {
     }
   };
 
+  if (group.category === "husgruppe") {
+    return (
+      <div className="w-full max-w-md mx-auto bg-slate-50 min-h-screen shadow-md sm:my-4 sm:rounded-3xl sm:border sm:border-slate-200/80 overflow-hidden">
+        {/* Quick Switcher Bar */}
+        <UserQuickSwitcherBar />
+
+        {/* Header & Breadcrumb */}
+        <div className="bg-white px-5 pt-4 pb-3 border-b border-slate-100 space-y-2">
+          <div className="flex items-center justify-between">
+            <Link
+              to="/leder"
+              id="btn-back-to-leader-nav"
+              className="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1.5 transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Gruppeleder</span>
+            </Link>
+            <span
+              className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${
+                isLeader
+                  ? "bg-emerald-100 text-emerald-800"
+                  : isDeputy
+                  ? "bg-blue-100 text-blue-800"
+                  : "bg-indigo-100 text-indigo-800"
+              }`}
+            >
+              {isLeader ? "Gruppeleder" : isDeputy ? "Nestleder" : "Admin"}
+            </span>
+          </div>
+        </div>
+
+        <div className="p-4 sm:p-5">
+          <HusfellesskapView groupId={group.id} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full max-w-md mx-auto bg-slate-50 min-h-screen shadow-md sm:my-4 sm:rounded-3xl sm:border sm:border-slate-200/80 overflow-hidden">
       {/* Quick Switcher Bar */}
@@ -364,6 +407,56 @@ export const LeaderGroupDetailPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Tabs Navigation: Aktiviteter, Gruppechat, Medlemmer */}
+      <div className="px-4 pt-3 pb-2 bg-slate-50 border-b border-slate-200/60 flex items-center gap-1.5">
+        <button
+          type="button"
+          id="tab-btn-group-aktiviteter"
+          onClick={() => setActiveRoomTab("aktiviteter")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeRoomTab === "aktiviteter"
+              ? "bg-white text-emerald-800 shadow-2xs border border-slate-200"
+              : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+          }`}
+        >
+          <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+          <span>Aktiviteter</span>
+        </button>
+
+        <button
+          type="button"
+          id="tab-btn-group-chat"
+          onClick={() => setActiveRoomTab("chat")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer relative ${
+            activeRoomTab === "chat"
+              ? "bg-white text-emerald-800 shadow-2xs border border-slate-200"
+              : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+          }`}
+        >
+          <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+          <span>Gruppechat</span>
+          {messages.length > 0 && (
+            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200/60">
+              {messages.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          id="tab-btn-group-medlemmer"
+          onClick={() => setActiveRoomTab("medlemmer")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeRoomTab === "medlemmer"
+              ? "bg-white text-emerald-800 shadow-2xs border border-slate-200"
+              : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+          }`}
+        >
+          <Users className="w-3.5 h-3.5 text-slate-500" />
+          <span>Medlemmer ({members.length})</span>
+        </button>
+      </div>
+
       {/* Toast feedback */}
       {actionFeedback && (
         <div
@@ -376,17 +469,18 @@ export const LeaderGroupDetailPage: React.FC = () => {
       )}
 
       <div className="p-5 space-y-6">
-        {/* GRUPPEKORT DETALJER / REDIGERING */}
-        <section
-          id="section-group-details"
-          className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-3.5"
-        >
-          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-            <Users className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Gruppedetaljer</span>
-          </h2>
 
-          {isEditingMeta ? (
+        {/* GRUPPEKORT DETALJER / REDIGERING */}
+        {isEditingMeta && (
+          <section
+            id="section-group-details"
+            className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-3.5"
+          >
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Rediger gruppedetaljer</span>
+            </h2>
+
             <form onSubmit={handleSaveMeta} className="space-y-3 pt-1">
               <div>
                 <label className="text-xs font-semibold text-slate-700 block mb-1">
@@ -477,37 +571,15 @@ export const LeaderGroupDetailPage: React.FC = () => {
                 </button>
               </div>
             </form>
-          ) : (
-            <div className="space-y-2.5 text-xs">
-              <div className="flex items-center justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-500 font-medium">Hovedleder:</span>
-                <span className="font-bold text-slate-800">
-                  {leaders.length > 0 ? leaders.map((l) => l.name).join(", ") : "Ingen leder satt"}
-                </span>
-              </div>
+          </section>
+        )}
 
-              <div className="flex items-center justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-500 font-medium">Nestleder:</span>
-                <span className="font-bold text-slate-800">
-                  {deputyLeaders.length > 0
-                    ? deputyLeaders.map((d) => d.name).join(", ")
-                    : "Ingen nestleder satt"}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between py-1">
-                <span className="text-slate-500 font-medium">Kategori:</span>
-                <span className="font-bold text-slate-800 capitalize">
-                  {group.category || "Tjenestegruppe"}
-                </span>
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* MØTEPLAN */}
-        <section
-          id="section-group-schedule"
+        {/* TAB 1: AKTIVITETER */}
+        {activeRoomTab === "aktiviteter" && (
+          <div className="space-y-6">
+            {/* MØTEPLAN */}
+            <section
+              id="section-group-schedule"
           className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-3"
         >
           <div className="flex items-center justify-between">
@@ -618,110 +690,6 @@ export const LeaderGroupDetailPage: React.FC = () => {
                 <span className="text-slate-400 italic">Ingen fast møteplan angitt.</span>
               )}
             </div>
-          )}
-        </section>
-
-        {/* MEDLEMMER I GRUPPEN */}
-        <section
-          id="section-group-members"
-          className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-3"
-        >
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-              <Users className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Medlemmer ({members.length})</span>
-            </h2>
-          </div>
-
-          {/* Member List */}
-          <div className="space-y-2">
-            {members.map((member) => {
-              const isGroupLeader = group.leaderIds.includes(member.id);
-              const isGroupDeputy = group.deputyLeaderIds?.includes(member.id);
-
-              return (
-                <div
-                  key={member.id}
-                  id={`member-row-${member.id}`}
-                  className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between gap-2"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-xs font-bold">
-                      {member.name.charAt(0)}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-slate-800">{member.name}</span>
-                        {isGroupLeader && (
-                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800">
-                            Leder
-                          </span>
-                        )}
-                        {isGroupDeputy && (
-                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-blue-100 text-blue-800">
-                            Nestleder
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-slate-400 font-medium">
-                        {member.phone || member.email || "Ingen kontaktinfo"}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Remove Member button (disabled for main leader to prevent orphan group) */}
-                  {!isGroupLeader && (
-                    <button
-                      type="button"
-                      id={`btn-remove-member-${member.id}`}
-                      onClick={() => handleRemoveMember(member.id, member.name)}
-                      className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
-                      title="Fjern fra gruppen"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Add Member form */}
-          {availablePersonsToAdd.length > 0 ? (
-            <div className="pt-2 border-t border-slate-100 space-y-2">
-              <label className="text-[11px] font-semibold text-slate-600 block">
-                Legg til person i gruppen:
-              </label>
-              <div className="flex gap-2">
-                <select
-                  id="select-add-member"
-                  value={selectedPersonToAdd}
-                  onChange={(e) => setSelectedPersonToAdd(e.target.value)}
-                  className="flex-1 text-xs px-3 py-2 border border-slate-300 rounded-xl bg-white focus:outline-emerald-600 text-slate-800"
-                >
-                  <option value="">Velg person fra listen...</option>
-                  {availablePersonsToAdd.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  id="btn-add-member"
-                  onClick={handleAddMember}
-                  disabled={!selectedPersonToAdd}
-                  className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1 shadow-xs cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Legg til</span>
-                </button>
-              </div>
-            </div>
-          ) : (
-            <p className="text-[11px] text-slate-400 italic pt-1">
-              Alle registrerte personer er allerede medlemmer i denne gruppen.
-            </p>
           )}
         </section>
 
@@ -1184,84 +1152,123 @@ export const LeaderGroupDetailPage: React.FC = () => {
             </div>
           )}
         </section>
-
-        {/* BESKJED TIL GRUPPEN */}
-        <section
-          id="section-group-messages"
-          className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-3.5"
-        >
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-              <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Beskjed til gruppen</span>
-            </h2>
-            <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
-              Synlig for {group.name}
-            </span>
           </div>
+        )}
 
-          {/* Message composer */}
-          <form onSubmit={handleSendMessage} className="space-y-2.5">
-            <textarea
-              id="input-group-message-content"
-              rows={2}
-              value={newMessageText}
-              onChange={(e) => setNewMessageText(e.target.value)}
-              placeholder="Skriv en beskjed til gruppens medlemmer (f.eks. 'Vi møtes tirsdag kl. 19')..."
-              className="w-full text-xs p-3 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:outline-emerald-600 text-slate-800 resize-none"
-            />
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-slate-400">
-                Publiseres fra {currentUser.name}
-              </span>
-              <button
-                type="submit"
-                id="btn-send-group-message"
-                disabled={!newMessageText.trim()}
-                className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
-              >
-                <Send className="w-3 h-3" />
-                <span>Send beskjed</span>
-              </button>
-            </div>
-          </form>
+        {/* TAB 2: CHAT */}
+        {activeRoomTab === "chat" && (
+          <div className="space-y-4">
+            <GroupChat groupId={group.id} />
+          </div>
+        )}
 
-          {messageFeedback && (
-            <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-800 flex items-center gap-1.5">
-              <Check className="w-3.5 h-3.5 text-emerald-600" />
-              <span>{messageFeedback}</span>
-            </div>
-          )}
-
-          {/* Published Messages Feed */}
-          <div className="space-y-2 pt-2 border-t border-slate-100">
-            <span className="text-[11px] font-bold text-slate-600 block">
-              Publiserte beskjeder ({messages.length})
-            </span>
-            {messages.length === 0 ? (
-              <p className="text-xs text-slate-400 italic">
-                Ingen beskjeder publisert til denne gruppen ennå.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1 text-xs"
-                  >
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-bold text-slate-700">{msg.senderName}</span>
-                      <span className="text-slate-400">
-                        {formatNorwegianDateTime(msg.createdAt)}
-                      </span>
-                    </div>
-                    <p className="text-slate-800 whitespace-pre-wrap">{msg.content}</p>
-                  </div>
-                ))}
+        {/* TAB 3: MEDLEMMER */}
+        {activeRoomTab === "medlemmer" && (
+          <div className="space-y-4">
+            <section
+              id="section-group-members"
+              className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-3"
+            >
+              <div className="flex items-center justify-between">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Medlemmer ({members.length})</span>
+                </h2>
               </div>
-            )}
+
+              {/* Member List */}
+              <div className="space-y-2">
+                {members.map((member) => {
+                  const isGroupLeader = group.leaderIds.includes(member.id);
+                  const isGroupDeputy = group.deputyLeaderIds?.includes(member.id);
+
+                  return (
+                    <div
+                      key={member.id}
+                      id={`member-row-${member.id}`}
+                      className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between gap-2"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-xs font-bold">
+                          {member.name.charAt(0)}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-slate-800">{member.name}</span>
+                            {isGroupLeader && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800">
+                                Leder
+                              </span>
+                            )}
+                            {isGroupDeputy && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-blue-100 text-blue-800">
+                                Nestleder
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-400 font-medium">
+                            {member.phone || member.email || "Ingen kontaktinfo"}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Remove Member button (disabled for main leader to prevent orphan group) */}
+                      {!isGroupLeader && (
+                        <button
+                          type="button"
+                          id={`btn-remove-member-${member.id}`}
+                          onClick={() => handleRemoveMember(member.id, member.name)}
+                          className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+                          title="Fjern fra gruppen"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Add Member form */}
+              {availablePersonsToAdd.length > 0 ? (
+                <div className="pt-2 border-t border-slate-100 space-y-2">
+                  <label className="text-[11px] font-semibold text-slate-600 block">
+                    Legg til person i gruppen:
+                  </label>
+                  <div className="flex gap-2">
+                    <select
+                      id="select-add-member"
+                      value={selectedPersonToAdd}
+                      onChange={(e) => setSelectedPersonToAdd(e.target.value)}
+                      className="flex-1 text-xs px-3 py-2 border border-slate-300 rounded-xl bg-white focus:outline-emerald-600 text-slate-800"
+                    >
+                      <option value="">Velg person fra listen...</option>
+                      {availablePersonsToAdd.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      id="btn-add-member"
+                      onClick={handleAddMember}
+                      disabled={!selectedPersonToAdd}
+                      className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1 shadow-xs cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Legg til</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-400 italic pt-1">
+                  Alle registrerte personer er allerede medlemmer i denne gruppen.
+                </p>
+              )}
+            </section>
           </div>
-        </section>
+        )}
       </div>
     </div>
   );
