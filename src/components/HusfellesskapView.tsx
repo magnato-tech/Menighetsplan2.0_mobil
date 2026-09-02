@@ -339,7 +339,7 @@ export const HusfellesskapView: React.FC<{
 
       {/* Tab Content 1: Samling & Oppmøte */}
       {activeTab === "meeting" && (
-        <div className="p-5 space-y-5">
+        <div id="section-husfellesskap-meeting" className="p-5 space-y-5">
           {/* Multi-meeting selector dropdown if group has multiple meetings */}
           {allGroupMeetings.length > 1 && (
             <div className="flex items-center justify-between gap-2 p-2.5 bg-slate-50 rounded-2xl border border-slate-200/80 text-xs">
@@ -714,14 +714,14 @@ export const HusfellesskapView: React.FC<{
 
       {/* Tab Content 2: Gruppechat */}
       {activeTab === "chat" && (
-        <div className="p-3">
+        <div id="section-husfellesskap-chat" className="p-3">
           <HusfellesskapChat groupId={group.id} />
         </div>
       )}
 
       {/* Tab Content 3: Medlemmer */}
       {activeTab === "members" && (
-        <div className="p-5 space-y-4">
+        <div id="section-husfellesskap-members" className="p-5 space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
               Gruppens medlemmer ({members.length})

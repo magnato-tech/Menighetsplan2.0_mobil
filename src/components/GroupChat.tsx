@@ -147,11 +147,13 @@ export const GroupChat: React.FC<{
 
   // File input ref for camera/image picker
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  // Scroll to bottom when messages update
+  // Scroll inner chat container to bottom when messages update (strictly contained, no window scrolling)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
   }, [messages.length]);
 
   if (!group) {
@@ -307,7 +309,11 @@ export const GroupChat: React.FC<{
       </div>
 
       {/* Messages Feed Area */}
-      <div className="p-4 space-y-3.5 max-h-[420px] min-h-[220px] overflow-y-auto bg-gradient-to-b from-slate-50/30 to-white">
+      <div
+        ref={messagesContainerRef}
+        id={`chat-messages-container-${group.id}`}
+        className="p-4 space-y-3.5 max-h-[420px] min-h-[220px] overflow-y-auto bg-gradient-to-b from-slate-50/30 to-white"
+      >
         {messages.length === 0 ? (
           <div className="py-12 text-center space-y-2">
             <div className="w-10 h-10 mx-auto rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
@@ -405,7 +411,6 @@ export const GroupChat: React.FC<{
             );
           })
         )}
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Toast Feedback */}

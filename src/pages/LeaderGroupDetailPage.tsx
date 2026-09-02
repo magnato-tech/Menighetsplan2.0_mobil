@@ -576,7 +576,7 @@ export const LeaderGroupDetailPage: React.FC = () => {
 
         {/* TAB 1: AKTIVITETER */}
         {activeRoomTab === "aktiviteter" && (
-          <div className="space-y-6">
+          <div id="section-group-aktiviteter-tab" className="space-y-6">
             {/* MØTEPLAN */}
             <section
               id="section-group-schedule"
@@ -1157,14 +1157,14 @@ export const LeaderGroupDetailPage: React.FC = () => {
 
         {/* TAB 2: CHAT */}
         {activeRoomTab === "chat" && (
-          <div className="space-y-4">
+          <div id="section-group-chat-tab" className="space-y-4">
             <GroupChat groupId={group.id} />
           </div>
         )}
 
         {/* TAB 3: MEDLEMMER */}
         {activeRoomTab === "medlemmer" && (
-          <div className="space-y-4">
+          <div id="section-group-medlemmer-tab" className="space-y-4">
             <section
               id="section-group-members"
               className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-3"
