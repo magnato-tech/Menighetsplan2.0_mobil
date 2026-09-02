@@ -1124,11 +1124,19 @@ export function useLeaderGroupDetail(groupId: string) {
 
   const group = getGroupById(groupId);
 
-  // Access check: User must be in group.leaderIds, group.deputyLeaderIds, or have globalRole === "admin"
+  // Access checks:
   const isLeader = Boolean(group && group.leaderIds.includes(currentUser.id));
   const isDeputy = Boolean(group && group.deputyLeaderIds?.includes(currentUser.id));
   const isAdmin = currentUser.globalRole === "admin";
-  const hasAccess = Boolean(group && (isLeader || isDeputy || isAdmin));
+  const hasLeaderAccess = Boolean(group && (isLeader || isDeputy || isAdmin));
+  const isMember = Boolean(
+    group &&
+      (group.memberIds.includes(currentUser.id) ||
+        group.leaderIds.includes(currentUser.id) ||
+        (group.deputyLeaderIds && group.deputyLeaderIds.includes(currentUser.id)) ||
+        isAdmin)
+  );
+  const hasAccess = Boolean(group && (isMember || hasLeaderAccess));
 
   const leaders = useMemo(() => {
     if (!group) return [];
@@ -1234,6 +1242,8 @@ export function useLeaderGroupDetail(groupId: string) {
 
   return {
     hasAccess,
+    isMember,
+    hasLeaderAccess,
     isLeader,
     isDeputy,
     isAdmin,

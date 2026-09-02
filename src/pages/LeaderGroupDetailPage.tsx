@@ -43,6 +43,8 @@ export const LeaderGroupDetailPage: React.FC = () => {
 
   const {
     hasAccess,
+    isMember,
+    hasLeaderAccess,
     isLeader,
     isDeputy,
     isAdmin,
@@ -219,28 +221,22 @@ export const LeaderGroupDetailPage: React.FC = () => {
           </div>
           <div className="space-y-1.5">
             <h3 className="text-base font-bold text-slate-800">
-              Dette området er for gruppeledere
+              Ingen tilgang til gruppen
             </h3>
             <p className="text-xs text-slate-500 leading-relaxed max-w-xs mx-auto">
               {!group
                 ? "Gruppen ble ikke funnet."
-                : `Du har ikke tilgang til å administrere denne gruppen. ${currentUser.name} er ikke registrert som leder eller nestleder for ${group.name}.`}
+                : `Du har ikke tilgang til denne gruppen. ${currentUser.name} er ikke registrert som medlem eller leder for ${group.name}.`}
             </p>
           </div>
           <div className="pt-2 flex flex-col gap-2">
             <Link
-              to="/leder"
-              id="btn-back-to-leader"
+              to="/"
+              id="btn-back-to-home"
               className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl transition-colors shadow-xs"
             >
               <ArrowLeft className="w-4 h-4" />
-              Tilbake til Gruppeleder-oversikt
-            </Link>
-            <Link
-              to="/"
-              className="text-xs text-slate-500 hover:text-slate-700 font-medium py-1"
-            >
-              Gå til Min side
+              Tilbake til Min side
             </Link>
           </div>
         </div>
@@ -331,24 +327,37 @@ export const LeaderGroupDetailPage: React.FC = () => {
         {/* Header & Breadcrumb */}
         <div className="bg-white px-5 pt-4 pb-3 border-b border-slate-100 space-y-2">
           <div className="flex items-center justify-between">
-            <Link
-              to="/leder"
-              id="btn-back-to-leader-nav"
-              className="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1.5 transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Gruppeleder</span>
-            </Link>
+            {hasLeaderAccess ? (
+              <Link
+                to="/leder"
+                id="btn-back-to-leader-nav"
+                className="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1.5 transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Gruppeleder</span>
+              </Link>
+            ) : (
+              <Link
+                to="/"
+                id="btn-back-to-home-nav"
+                className="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1.5 transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Min side</span>
+              </Link>
+            )}
             <span
               className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${
                 isLeader
                   ? "bg-emerald-100 text-emerald-800"
                   : isDeputy
                   ? "bg-blue-100 text-blue-800"
-                  : "bg-indigo-100 text-indigo-800"
+                  : isAdmin
+                  ? "bg-indigo-100 text-indigo-800"
+                  : "bg-slate-100 text-slate-700"
               }`}
             >
-              {isLeader ? "Gruppeleder" : isDeputy ? "Nestleder" : "Admin"}
+              {isLeader ? "Gruppeleder" : isDeputy ? "Nestleder" : isAdmin ? "Admin" : "Medlem"}
             </span>
           </div>
         </div>
@@ -368,24 +377,37 @@ export const LeaderGroupDetailPage: React.FC = () => {
       {/* Header & Breadcrumb */}
       <div className="bg-white px-5 pt-4 pb-3 border-b border-slate-100 space-y-2">
         <div className="flex items-center justify-between">
-          <Link
-            to="/leder"
-            id="btn-back-to-leader-nav"
-            className="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1.5 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Gruppeleder</span>
-          </Link>
+          {hasLeaderAccess ? (
+            <Link
+              to="/leder"
+              id="btn-back-to-leader-nav"
+              className="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1.5 transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Gruppeleder</span>
+            </Link>
+          ) : (
+            <Link
+              to="/"
+              id="btn-back-to-home-nav"
+              className="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1.5 transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Min side</span>
+            </Link>
+          )}
           <span
             className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${
               isLeader
                 ? "bg-emerald-100 text-emerald-800"
                 : isDeputy
                 ? "bg-blue-100 text-blue-800"
-                : "bg-indigo-100 text-indigo-800"
+                : isAdmin
+                ? "bg-indigo-100 text-indigo-800"
+                : "bg-slate-100 text-slate-700"
             }`}
           >
-            {isLeader ? "Gruppeleder" : isDeputy ? "Nestleder" : "Admin"}
+            {isLeader ? "Gruppeleder" : isDeputy ? "Nestleder" : isAdmin ? "Admin" : "Medlem"}
           </span>
         </div>
 
@@ -396,7 +418,7 @@ export const LeaderGroupDetailPage: React.FC = () => {
               {group.category || "Tjenestegruppe"} • {members.length} medlemmer
             </p>
           </div>
-          {!isEditingMeta && (
+          {hasLeaderAccess && !isEditingMeta && (
             <button
               type="button"
               id="btn-edit-group-meta"
@@ -596,7 +618,7 @@ export const LeaderGroupDetailPage: React.FC = () => {
               <Clock className="w-3.5 h-3.5 text-emerald-600" />
               <span>Fast møteplan</span>
             </h2>
-            {!isEditingSchedule && (
+            {!isEditingSchedule && hasLeaderAccess && (
               <button
                 type="button"
                 id="btn-edit-schedule"
@@ -981,7 +1003,7 @@ export const LeaderGroupDetailPage: React.FC = () => {
                                 </div>
 
                                 {/* Quick Assign action button */}
-                                {!taskCovered && (
+                                {!taskCovered && hasLeaderAccess && (
                                   <div className="pt-1 flex items-center justify-between">
                                     <button
                                       type="button"
@@ -1128,7 +1150,7 @@ export const LeaderGroupDetailPage: React.FC = () => {
                             {/* Handling */}
                             <td className="py-2.5 px-3 text-right whitespace-nowrap">
                               <div className="flex items-center justify-end gap-1.5">
-                                {(isVacant || isForfall) && (
+                                {(isVacant || isForfall) && hasLeaderAccess && (
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -1221,8 +1243,8 @@ export const LeaderGroupDetailPage: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Remove Member button (disabled for main leader to prevent orphan group) */}
-                      {!isGroupLeader && (
+                      {/* Remove Member button (disabled for non-leaders and main leader to prevent orphan group) */}
+                      {hasLeaderAccess && !isGroupLeader && (
                         <button
                           type="button"
                           id={`btn-remove-member-${member.id}`}
@@ -1238,42 +1260,44 @@ export const LeaderGroupDetailPage: React.FC = () => {
                 })}
               </div>
 
-              {/* Add Member form */}
-              {availablePersonsToAdd.length > 0 ? (
-                <div className="pt-2 border-t border-slate-100 space-y-2">
-                  <label className="text-[11px] font-semibold text-slate-600 block">
-                    Legg til person i gruppen:
-                  </label>
-                  <div className="flex gap-2">
-                    <select
-                      id="select-add-member"
-                      value={selectedPersonToAdd}
-                      onChange={(e) => setSelectedPersonToAdd(e.target.value)}
-                      className="flex-1 text-xs px-3 py-2 border border-slate-300 rounded-xl bg-white focus:outline-emerald-600 text-slate-800"
-                    >
-                      <option value="">Velg person fra listen...</option>
-                      {availablePersonsToAdd.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      id="btn-add-member"
-                      onClick={handleAddMember}
-                      disabled={!selectedPersonToAdd}
-                      className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1 shadow-xs cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Legg til</span>
-                    </button>
+              {/* Add Member form - for leaders only */}
+              {hasLeaderAccess && (
+                availablePersonsToAdd.length > 0 ? (
+                  <div className="pt-2 border-t border-slate-100 space-y-2">
+                    <label className="text-[11px] font-semibold text-slate-600 block">
+                      Legg til person i gruppen:
+                    </label>
+                    <div className="flex gap-2">
+                      <select
+                        id="select-add-member"
+                        value={selectedPersonToAdd}
+                        onChange={(e) => setSelectedPersonToAdd(e.target.value)}
+                        className="flex-1 text-xs px-3 py-2 border border-slate-300 rounded-xl bg-white focus:outline-emerald-600 text-slate-800"
+                      >
+                        <option value="">Velg person fra listen...</option>
+                        {availablePersonsToAdd.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        id="btn-add-member"
+                        onClick={handleAddMember}
+                        disabled={!selectedPersonToAdd}
+                        className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1 shadow-xs cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Legg til</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <p className="text-[11px] text-slate-400 italic pt-1">
-                  Alle registrerte personer er allerede medlemmer i denne gruppen.
-                </p>
+                ) : (
+                  <p className="text-[11px] text-slate-400 italic pt-1">
+                    Alle registrerte personer er allerede medlemmer i denne gruppen.
+                  </p>
+                )
               )}
             </section>
           </div>

@@ -44,8 +44,11 @@ export default function App() {
                 element={<ModulePlaceholderPage module="meldinger" />}
               />
               <Route path="/oppgave/:taskId" element={<TaskDetailPage />} />
+              <Route path="/gruppe/:groupId" element={<LeaderGroupDetailPage />} />
+              <Route path="/samling/:gatheringId" element={<LeaderGatheringDetailPage />} />
               <Route path="/husfellesskap" element={<HusfellesskapPage />} />
               <Route path="/husfellesskap/:groupId" element={<HusfellesskapPage />} />
+              <Route path="/grupper" element={<HusfellesskapPage />} />
               {/* Fallback to home */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
