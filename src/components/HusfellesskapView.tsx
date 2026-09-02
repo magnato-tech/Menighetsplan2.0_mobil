@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useHusfellesskap, formatNorwegianDateTime } from "../hooks/useAppHooks";
 import { HusfellesskapChat } from "./HusfellesskapChat";
 import { Gathering } from "../types";
@@ -58,7 +59,15 @@ export const HusfellesskapView: React.FC<{
     allPersons,
   } = useHusfellesskap(groupId);
 
-  const [activeTab, setActiveTab] = useState<"meeting" | "chat" | "members">(defaultTab);
+  const [searchParams] = useSearchParams();
+  const urlTab = searchParams.get("tab") as "meeting" | "chat" | "members" | null;
+  const [activeTab, setActiveTab] = useState<"meeting" | "chat" | "members">(urlTab || defaultTab);
+
+  useEffect(() => {
+    if (urlTab) {
+      setActiveTab(urlTab);
+    }
+  }, [urlTab]);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ text: string; type: "success" | "info" } | null>(null);
 

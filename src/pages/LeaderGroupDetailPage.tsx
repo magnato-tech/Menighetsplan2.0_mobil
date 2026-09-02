@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import React, { useState, useMemo, useEffect } from "react";
+import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   useLeaderGroupDetail,
   formatNorwegianDateTime,
@@ -79,8 +79,17 @@ export const LeaderGroupDetailPage: React.FC = () => {
   // Add member selector
   const [selectedPersonToAdd, setSelectedPersonToAdd] = useState<string>("");
 
+  const [searchParams] = useSearchParams();
+  const urlTab = searchParams.get("tab") as "aktiviteter" | "chat" | "medlemmer" | null;
+
   // Room Tab for non-husgruppe: 'aktiviteter' | 'chat' | 'medlemmer'
-  const [activeRoomTab, setActiveRoomTab] = useState<"aktiviteter" | "chat" | "medlemmer">("aktiviteter");
+  const [activeRoomTab, setActiveRoomTab] = useState<"aktiviteter" | "chat" | "medlemmer">(urlTab || "aktiviteter");
+
+  useEffect(() => {
+    if (urlTab) {
+      setActiveRoomTab(urlTab);
+    }
+  }, [urlTab]);
 
   // Semester Filter states (Aug 2026 - Jan 2027)
   const [selectedMonth, setSelectedMonth] = useState<string>("all");

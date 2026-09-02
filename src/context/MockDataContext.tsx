@@ -68,7 +68,7 @@ export interface MockDataContextType {
   deleteGathering: (gatheringId: string) => { success: boolean; error?: string };
   sendGatheringInvitation: (gatheringId: string) => { success: boolean; error?: string };
   assignTaskToPerson: (taskId: string, personId: string, responseStatus?: "confirmed" | "pending") => Promise<{ success: boolean; error?: string }>;
-  reportAbsence: (taskId: string, personId: string) => Promise<{ success: boolean; error?: string }>;
+  reportAbsence: (taskId: string, personId: string, reason?: string) => Promise<{ success: boolean; error?: string }>;
   updateAssignmentStatus: (assignmentId: string, response: "confirmed" | "pending" | "declined" | "withdrawn") => { success: boolean; error?: string };
   removeAssignment: (assignmentId: string) => { success: boolean; error?: string };
   updateTaskStatus: (taskId: string, status: Task["status"]) => { success: boolean; error?: string };
@@ -378,10 +378,33 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Action: Report absence / meld forfall
   const reportAbsence = useCallback(
-    async (taskId: string, personId: string): Promise<{ success: boolean; error?: string }> => {
+    async (taskId: string, personId: string, reason?: string): Promise<{ success: boolean; error?: string }> => {
       const task = tasks.find((t) => t.id === taskId);
       if (!task) {
         return { success: false, error: "Oppgaven ble ikke funnet." };
+      }
+
+      const person = persons.find((p) => p.id === personId);
+      const personName = person ? person.name : "Et medlem";
+
+      const gathering = gatherings.find((g) => g.id === task.gatheringId);
+      const gatheringTitle = gathering ? gathering.title : "samling";
+
+      let gatheringTime = "";
+      if (gathering?.startsAt) {
+        try {
+          const d = new Date(gathering.startsAt);
+          const days = ["søndag", "mandag", "tirsdag", "onsdag", "torsdag", "fredag", "lørdag"];
+          const months = ["jan.", "feb.", "mars", "apr.", "mai", "juni", "juli", "aug.", "sep.", "okt.", "nov.", "des."];
+          const dayName = days[d.getDay()];
+          const dayNum = d.getDate();
+          const monthName = months[d.getMonth()];
+          const hours = d.getHours().toString().padStart(2, "0");
+          const minutes = d.getMinutes().toString().padStart(2, "0");
+          gatheringTime = `${dayName} ${dayNum}. ${monthName} kl. ${hours}:${minutes}`;
+        } catch {
+          gatheringTime = gathering.startsAt;
+        }
       }
 
       // Update task status to 'vacant'
@@ -398,9 +421,27 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         )
       );
 
+      // Post system message to the relevant group chat
+      if (task.groupId) {
+        const datePart = gatheringTime ? ` (${gatheringTime})` : "";
+        const reasonPart = reason && reason.trim() ? `\nBegrunnelse: ${reason.trim()}` : "";
+        const content = `⚠️ Forfall meldt: ${personName} har meldt forfall på oppgaven «${task.title}» til ${gatheringTitle}${datePart}.${reasonPart}\n\nOppgaven er nå ledig og trenger dekning.`;
+
+        const newSystemMessage: GroupMessage = {
+          id: `msg-forfall-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          groupId: task.groupId,
+          senderPersonId: personId,
+          senderName: `${personName} (Forfall)`,
+          content,
+          createdAt: new Date().toISOString(),
+        };
+
+        setGroupMessages((prev) => [...prev, newSystemMessage]);
+      }
+
       return { success: true };
     },
-    [tasks]
+    [tasks, persons, gatherings]
   );
 
   // Admin Action: Update group (name, category, leaderIds, deputyLeaderIds, meetingSchedule)
