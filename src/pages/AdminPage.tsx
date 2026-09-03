@@ -5,7 +5,11 @@ import {
   useModuleConfig,
   formatNorwegianDateTime,
   GROUP_CATEGORIES,
+  parseIsoToDateAndTime,
+  combineDateAndTimeToIso,
 } from "../hooks/useAppHooks";
+import { GroupCategory } from "../types";
+import { StaffingBadge } from "../components/StaffingBadge";
 import { UserQuickSwitcherBar } from "../components/UserSwitcher";
 import {
   Shield,
@@ -27,6 +31,8 @@ import {
   UserCheck,
   UserCog,
   UserPlus,
+  Plus,
+  Building2,
   Phone,
   Mail,
   Sliders,
@@ -42,24 +48,30 @@ export const AdminPage: React.FC = () => {
     adminGatherings,
     adminTasks,
     updateGroupName,
+    createGroup,
     addPerson,
+    createGathering,
+    updateGathering,
   } = useAdminDashboard();
 
   const { kalender, meldinger, toggleKalender, toggleMeldinger } = useModuleConfig();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const validTabs = ["grupper", "personer", "samlinger", "oppgaver", "innstillinger"] as const;
+  const validTabs = ["grupper", "personer", "arrangementer", "oppgaver", "innstillinger"] as const;
   type AdminTab = typeof validTabs[number];
 
-  const initialTab = (searchParams.get("tab") as AdminTab) || "grupper";
+  const rawTab = searchParams.get("tab");
+  const normalizedTab = rawTab === "samlinger" ? "arrangementer" : (rawTab as AdminTab);
+  const initialTab = normalizedTab || "grupper";
   const [activeTab, setActiveTab] = useState<AdminTab>(
     validTabs.includes(initialTab) ? initialTab : "grupper"
   );
 
   useEffect(() => {
-    const tabParam = searchParams.get("tab") as AdminTab;
-    if (tabParam && validTabs.includes(tabParam)) {
-      setActiveTab(tabParam);
+    const tabParam = searchParams.get("tab");
+    const norm = tabParam === "samlinger" ? "arrangementer" : (tabParam as AdminTab);
+    if (norm && validTabs.includes(norm)) {
+      setActiveTab(norm);
     }
   }, [searchParams]);
 
@@ -87,6 +99,12 @@ export const AdminPage: React.FC = () => {
     if (groupCategoryFilter === "all") return adminGroups;
     return adminGroups.filter((g) => (g.group.category || "tjenestegruppe") === groupCategoryFilter);
   }, [adminGroups, groupCategoryFilter]);
+
+  // New Group Form States
+  const [showAddGroupForm, setShowAddGroupForm] = useState<boolean>(false);
+  const [newGroupName, setNewGroupName] = useState<string>("");
+  const [newGroupCategory, setNewGroupCategory] = useState<GroupCategory>("tjenestegruppe");
+  const [newGroupLeaderId, setNewGroupLeaderId] = useState<string>("");
 
   // New Person Form States
   const [showAddPersonForm, setShowAddPersonForm] = useState<boolean>(false);
@@ -140,6 +158,89 @@ export const AdminPage: React.FC = () => {
       setShowAddPersonForm(false);
     } else {
       showFeedback(res.error || "Kunne ikke opprette person.", "error");
+    }
+  };
+
+  // New Gathering Form State
+  const [showAddGatheringForm, setShowAddGatheringForm] = useState<boolean>(false);
+  const [newGatheringTitle, setNewGatheringTitle] = useState<string>("");
+  const [newGatheringDate, setNewGatheringDate] = useState<string>("");
+  const [newGatheringTime, setNewGatheringTime] = useState<string>("11:00");
+  const [newGatheringLocation, setNewGatheringLocation] = useState<string>("Hovedsalen og kafeen");
+  const [newGatheringGroupId, setNewGatheringGroupId] = useState<string>("");
+
+  // Edit Gathering Modal State (for list view)
+  const [editingGathering, setEditingGathering] = useState<{
+    id: string;
+    title: string;
+    date: string;
+    time: string;
+    location: string;
+  } | null>(null);
+
+  const handleCreateGathering = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newGatheringTitle.trim()) {
+      showFeedback("Vennligst oppgi en tittel for arrangementet.", "error");
+      return;
+    }
+    if (!newGatheringDate) {
+      showFeedback("Vennligst oppgi en dato for arrangementet.", "error");
+      return;
+    }
+
+    const startsAt = combineDateAndTimeToIso(newGatheringDate, newGatheringTime || "11:00");
+    const serviceGroups = adminGroups.filter((g) => g.group.category !== "husgruppe");
+    const targetGroupId =
+      newGatheringGroupId ||
+      serviceGroups[0]?.group.id ||
+      adminGroups[0]?.group.id ||
+      "group-felles";
+
+    const res = createGathering({
+      title: newGatheringTitle.trim(),
+      startsAt,
+      location: newGatheringLocation.trim() || undefined,
+      groupId: targetGroupId,
+      type: "arrangement",
+    });
+
+    if (res.success && res.gathering) {
+      showFeedback(`«${res.gathering.title}» ble opprettet!`);
+      setShowAddGatheringForm(false);
+      setNewGatheringTitle("");
+      setNewGatheringDate("");
+      setNewGatheringTime("11:00");
+      setNewGatheringLocation("Hovedsalen og kafeen");
+    } else {
+      showFeedback(res.error || "Kunne ikke opprette arrangement.", "error");
+    }
+  };
+
+  const handleSaveGatheringEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingGathering) return;
+    if (!editingGathering.title.trim()) {
+      showFeedback("Tittel kan ikke være tom.", "error");
+      return;
+    }
+    if (!editingGathering.date) {
+      showFeedback("Dato må fylles ut.", "error");
+      return;
+    }
+
+    const startsAt = combineDateAndTimeToIso(editingGathering.date, editingGathering.time || "11:00");
+    const res = updateGathering(editingGathering.id, {
+      title: editingGathering.title.trim(),
+      startsAt,
+      location: editingGathering.location.trim() || undefined,
+    });
+
+    if (res.success) {
+      showFeedback(`Endringene for «${editingGathering.title}» ble lagret!`);
+      setEditingGathering(null);
+    } else {
+      showFeedback(res.error || "Kunne ikke oppdatere arrangement.", "error");
     }
   };
 
@@ -248,16 +349,16 @@ export const AdminPage: React.FC = () => {
           </button>
           <button
             type="button"
-            id="tab-samlinger"
-            onClick={() => handleTabChange("samlinger")}
+            id="tab-arrangementer"
+            onClick={() => handleTabChange("arrangementer")}
             className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-1 ${
-              activeTab === "samlinger"
+              activeTab === "arrangementer"
                 ? "bg-white text-slate-800 shadow-xs"
                 : "text-slate-600 hover:text-slate-900"
             }`}
           >
             <CalendarDays className="w-3.5 h-3.5" />
-            Samlinger ({adminGatherings.length})
+            Arrangementer ({adminGatherings.length})
           </button>
           <button
             type="button"
@@ -697,95 +798,251 @@ export const AdminPage: React.FC = () => {
           </div>
         )}
 
-        {/* TAB 3: SAMLINGER & BEMANNINGSSTATUS */}
-        {activeTab === "samlinger" && (
+        {/* TAB 3: ARRANGEMENTER & BEMANNINGSSTATUS */}
+        {activeTab === "arrangementer" && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Samlinger & samlingsplanlegging
-              </h3>
-              <span className="text-[11px] text-slate-400 font-medium">
-                Klikk på en samling for detaljvisning
-              </span>
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Arrangementer & bemanningsstatus ({adminGatherings.length})
+                </h3>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  Åpne og administrative arrangementer
+                </span>
+              </div>
+              <button
+                type="button"
+                id="btn-toggle-add-gathering"
+                onClick={() => setShowAddGatheringForm((prev) => !prev)}
+                className="w-7 h-7 flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-xs transition-colors cursor-pointer shrink-0"
+                title="Nytt arrangement"
+                aria-label="Nytt arrangement"
+              >
+                <Plus className={`w-4 h-4 transition-transform duration-200 ${showAddGatheringForm ? "rotate-45" : ""}`} />
+              </button>
             </div>
 
-            {adminGatherings.map(({ gathering, group, tasks: gTasks, totalTasks, coveredTasksCount, missingStaffingCount, staffing }) => (
-              <div
-                key={gathering.id}
-                id={`admin-gathering-card-${gathering.id}`}
-                className="p-3.5 bg-white rounded-2xl border border-slate-200/80 space-y-3 shadow-xs transition-all hover:border-indigo-200"
+            {/* Add Gathering Form */}
+            {showAddGatheringForm && (
+              <form
+                onSubmit={handleCreateGathering}
+                id="form-add-gathering"
+                className="p-3.5 bg-indigo-50/50 rounded-2xl border border-indigo-200/80 space-y-3 shadow-xs animate-in fade-in duration-150"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <Link
-                      to={`/admin/samling/${gathering.id}`}
-                      id={`link-gathering-title-${gathering.id}`}
-                      className="text-sm font-bold text-slate-800 hover:text-indigo-600 transition-colors block"
+                <div className="flex items-center justify-between border-b border-indigo-100 pb-1.5">
+                  <span className="text-xs font-bold text-indigo-900 flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-indigo-700" />
+                    Opprett nytt arrangement
+                  </span>
+                  <span className="text-[10px] text-indigo-700 font-medium">
+                    Type: arrangement
+                  </span>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <div>
+                    <label
+                      htmlFor="input-new-gathering-title"
+                      className="text-[11px] font-bold text-slate-700 block mb-0.5"
                     >
-                      {gathering.title}
-                    </Link>
-                    <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                      {formatNorwegianDateTime(gathering.startsAt)} • {group?.name || "Ukjent gruppe"}
-                    </p>
+                      Tittel <span className="text-red-500">*</span>:
+                    </label>
+                    <input
+                      type="text"
+                      id="input-new-gathering-title"
+                      value={newGatheringTitle}
+                      onChange={(e) => setNewGatheringTitle(e.target.value)}
+                      placeholder="F.eks. Høsttakkefest & fellesmiddag"
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                      required
+                    />
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {missingStaffingCount > 0 && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
-                        Mangler {missingStaffingCount}
-                      </span>
-                    )}
-                    <Link
-                      to={`/admin/samling/${gathering.id}`}
-                      id={`btn-open-gathering-${gathering.id}`}
-                      className="px-2.5 py-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg border border-indigo-200/60 flex items-center gap-1 transition-colors cursor-pointer"
-                    >
-                      Åpne samling
-                      <ChevronRight className="w-3 h-3" />
-                    </Link>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label
+                        htmlFor="input-new-gathering-date"
+                        className="text-[11px] font-bold text-slate-700 block mb-0.5"
+                      >
+                        Dato <span className="text-red-500">*</span>:
+                      </label>
+                      <input
+                        type="date"
+                        id="input-new-gathering-date"
+                        value={newGatheringDate}
+                        onChange={(e) => setNewGatheringDate(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="input-new-gathering-time"
+                        className="text-[11px] font-bold text-slate-700 block mb-0.5"
+                      >
+                        Tid:
+                      </label>
+                      <input
+                        type="time"
+                        id="input-new-gathering-time"
+                        value={newGatheringTime}
+                        onChange={(e) => setNewGatheringTime(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label
+                        htmlFor="input-new-gathering-location"
+                        className="text-[11px] font-semibold text-slate-700 block mb-0.5"
+                      >
+                        Sted:
+                      </label>
+                      <input
+                        type="text"
+                        id="input-new-gathering-location"
+                        value={newGatheringLocation}
+                        onChange={(e) => setNewGatheringLocation(e.target.value)}
+                        placeholder="F.eks. Hovedsalen og kafeen"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="input-new-gathering-group"
+                        className="text-[11px] font-semibold text-slate-700 block mb-0.5"
+                      >
+                        Ansvarlig gruppe:
+                      </label>
+                      <select
+                        id="input-new-gathering-group"
+                        value={newGatheringGroupId}
+                        onChange={(e) => setNewGatheringGroupId(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                      >
+                        {adminGroups
+                          .filter((g) => g.group.category !== "husgruppe")
+                          .map(({ group }) => (
+                            <option key={group.id} value={group.id}>
+                              {group.name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
 
-                <div className="pt-1.5 border-t border-slate-100 text-xs">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                    Oppgaver ({gTasks.length}):
-                  </span>
-                  <div className="space-y-1">
-                    {gTasks.map((t) => (
-                      <div
-                        key={t.id}
-                        className="flex items-center justify-between text-xs py-0.5"
+                <div className="flex items-center justify-end gap-2 pt-1 border-t border-indigo-100/60">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddGatheringForm(false)}
+                    className="px-2.5 py-1.5 text-xs text-slate-600 hover:text-slate-800 rounded-lg cursor-pointer"
+                  >
+                    Avbryt
+                  </button>
+                  <button
+                    type="submit"
+                    id="btn-submit-add-gathering"
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    Opprett arrangement
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {adminGatherings.length === 0 ? (
+              <div className="p-8 text-center bg-white rounded-2xl border border-slate-200 text-xs text-slate-400">
+                Ingen arrangementer funnet.
+              </div>
+            ) : (
+              adminGatherings.map(({ gathering, group, tasks: gTasks, tasksWithStaffing, totalTasks, coveredTasksCount, missingStaffingCount, staffing }) => (
+                <div
+                  key={gathering.id}
+                  id={`admin-gathering-card-${gathering.id}`}
+                  className="p-3.5 bg-white rounded-2xl border border-slate-200/80 space-y-3 shadow-xs transition-all hover:border-indigo-200"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <Link
+                        to={`/admin/samling/${gathering.id}`}
+                        id={`link-gathering-title-${gathering.id}`}
+                        className="text-sm font-bold text-slate-800 hover:text-indigo-600 transition-colors block"
                       >
-                        <Link
-                          to={`/admin/oppgave/${t.id}`}
-                          className="text-slate-700 hover:text-indigo-600 font-medium transition-colors truncate max-w-[210px]"
+                        {gathering.title}
+                      </Link>
+                      <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                        {formatNorwegianDateTime(gathering.startsAt)} • {group?.name || "Ukjent gruppe"}
+                        {gathering.location && ` • ${gathering.location}`}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <StaffingBadge color={staffing.color} statusText={staffing.badgeText} />
+                      <button
+                        type="button"
+                        id={`btn-edit-gathering-${gathering.id}`}
+                        onClick={() => {
+                          const { date, time } = parseIsoToDateAndTime(gathering.startsAt);
+                          setEditingGathering({
+                            id: gathering.id,
+                            title: gathering.title,
+                            date,
+                            time,
+                            location: gathering.location || "",
+                          });
+                        }}
+                        className="px-2 py-1 text-[11px] font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-200 flex items-center gap-1 transition-colors cursor-pointer"
+                        title="Rediger arrangement"
+                      >
+                        <Edit2 className="w-3 h-3 text-slate-500" />
+                        Rediger
+                      </button>
+                      <Link
+                        to={`/admin/samling/${gathering.id}`}
+                        id={`btn-open-gathering-${gathering.id}`}
+                        className="px-2.5 py-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg border border-indigo-200/60 flex items-center gap-1 transition-colors cursor-pointer"
+                      >
+                        Åpne
+                        <ChevronRight className="w-3 h-3" />
+                      </Link>
+                    </div>
+                  </div>
+
+                  <div className="pt-1.5 border-t border-slate-100 text-xs">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                      Oppgaver ({gTasks.length}):
+                    </span>
+                    <div className="space-y-1">
+                      {tasksWithStaffing?.map(({ task: t, taskStaffing }) => (
+                        <div
+                          key={t.id}
+                          className="flex items-center justify-between text-xs py-0.5"
                         >
-                          {t.title}
-                        </Link>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <span
-                            className={`text-[10px] font-semibold px-1.5 py-0.2 rounded ${
-                              t.status === "confirmed"
-                                ? "text-emerald-700 bg-emerald-50"
-                                : t.status === "vacant"
-                                ? "text-red-700 bg-red-50"
-                                : "text-amber-800 bg-amber-50"
-                            }`}
-                          >
-                            {t.neededCount !== undefined ? `Behov: ${t.neededCount}` : "Behov ikke satt"}
-                          </span>
                           <Link
                             to={`/admin/oppgave/${t.id}`}
-                            className="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold"
+                            className="text-slate-700 hover:text-indigo-600 font-medium transition-colors truncate max-w-[200px]"
                           >
-                            Kort →
+                            {t.title}
                           </Link>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <StaffingBadge color={taskStaffing.color} statusText={taskStaffing.statusText} />
+                            <Link
+                              to={`/admin/oppgave/${t.id}`}
+                              className="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold"
+                            >
+                              Kort →
+                            </Link>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         )}
 
@@ -801,7 +1058,7 @@ export const AdminPage: React.FC = () => {
               </span>
             </div>
 
-            {adminTasks.map(({ task, gathering, group, assignedPerson, assignedPersonsList, isFullyCovered, missingCount }) => (
+            {adminTasks.map(({ task, gathering, group, assignedPerson, assignedPersonsList, isFullyCovered, missingCount, taskStaffing }) => (
               <div
                 key={task.id}
                 id={`admin-task-card-${task.id}`}
@@ -837,25 +1094,7 @@ export const AdminPage: React.FC = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
-                        isFullyCovered
-                          ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                          : task.status === "vacant"
-                          ? "bg-red-100 text-red-700 border border-red-200"
-                          : "bg-amber-100 text-amber-800 border border-amber-200"
-                      }`}
-                    >
-                      {task.neededCount !== undefined
-                        ? isFullyCovered
-                          ? "Fullt dekket"
-                          : `Mangler: ${missingCount}`
-                        : task.status === "confirmed"
-                        ? "Dekket"
-                        : task.status === "vacant"
-                        ? "Trenger vikar"
-                        : "Ledig oppgave"}
-                    </span>
+                    <StaffingBadge color={taskStaffing.color} statusText={taskStaffing.statusText} />
                     <Link
                       to={`/admin/oppgave/${task.id}`}
                       id={`btn-open-task-${task.id}`}
@@ -868,8 +1107,8 @@ export const AdminPage: React.FC = () => {
                 </div>
 
                 <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
-                  <span className="text-slate-400">
-                    {task.neededCount !== undefined ? `Behov: ${task.neededCount} pers.` : "Behov: Ikke satt"}
+                  <span className="text-slate-500">
+                    Behov: {taskStaffing.neededCount} pers. ({taskStaffing.confirmedCount}/{taskStaffing.neededCount} bekreftet)
                   </span>
                   <span className="font-semibold text-slate-700">
                     {assignedPerson ? (
@@ -881,7 +1120,7 @@ export const AdminPage: React.FC = () => {
                         {assignedPerson.name}
                       </Link>
                     ) : (
-                      <span className="text-slate-400 italic">Ingen (ubesatt)</span>
+                      <span className="text-slate-400 italic">Ingen bekreftet</span>
                     )}
                   </span>
                 </div>
@@ -940,6 +1179,115 @@ export const AdminPage: React.FC = () => {
             </div>
           </div>
         )}
+
+      {/* Edit Gathering Modal */}
+      {editingGathering && (
+        <div
+          id="modal-admin-edit-gathering"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150"
+        >
+          <div className="bg-white rounded-2xl max-w-md w-full p-4 border border-slate-200 shadow-xl space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <div className="flex items-center gap-1.5 text-slate-800 font-bold text-sm">
+                <Edit2 className="w-4 h-4 text-indigo-600" />
+                Rediger arrangement
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingGathering(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveGatheringEdit} className="space-y-2.5 text-xs">
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-0.5">
+                  Tittel <span className="text-red-500">*</span>:
+                </label>
+                <input
+                  type="text"
+                  id="input-edit-gathering-title"
+                  value={editingGathering.title}
+                  onChange={(e) =>
+                    setEditingGathering({ ...editingGathering, title: e.target.value })
+                  }
+                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-0.5">
+                    Dato <span className="text-red-500">*</span>:
+                  </label>
+                  <input
+                    type="date"
+                    id="input-edit-gathering-date"
+                    value={editingGathering.date}
+                    onChange={(e) =>
+                      setEditingGathering({ ...editingGathering, date: e.target.value })
+                    }
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-0.5">
+                    Tid:
+                  </label>
+                  <input
+                    type="time"
+                    id="input-edit-gathering-time"
+                    value={editingGathering.time}
+                    onChange={(e) =>
+                      setEditingGathering({ ...editingGathering, time: e.target.value })
+                    }
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-700 block mb-0.5">
+                  Sted:
+                </label>
+                <input
+                  type="text"
+                  id="input-edit-gathering-location"
+                  value={editingGathering.location}
+                  onChange={(e) =>
+                    setEditingGathering({ ...editingGathering, location: e.target.value })
+                  }
+                  placeholder="F.eks. Hovedsalen"
+                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  id="btn-cancel-edit-gathering"
+                  onClick={() => setEditingGathering(null)}
+                  className="px-2.5 py-1.5 text-xs text-slate-600 hover:text-slate-800 rounded-lg cursor-pointer"
+                >
+                  Avbryt
+                </button>
+                <button
+                  type="submit"
+                  id="btn-save-edit-gathering"
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  Lagre endringer
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );

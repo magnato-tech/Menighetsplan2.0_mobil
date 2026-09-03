@@ -3,6 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   useLeaderGatheringDetail,
   formatNorwegianDateTime,
+  parseIsoToDateAndTime,
+  combineDateAndTimeToIso,
 } from "../hooks/useAppHooks";
 import { UserQuickSwitcherBar } from "../components/UserSwitcher";
 import { Task, Person, Assignment, Group } from "../types";
@@ -38,6 +40,7 @@ import {
   CheckSquare,
   Building2,
   Share2,
+  Save,
 } from "lucide-react";
 
 export interface IntegratedScheduleRow {
@@ -97,6 +100,7 @@ export const GatheringDetailView: React.FC<GatheringDetailViewProps> = ({
     updateTask,
     createTask,
     deleteTask,
+    updateGathering,
   } = useLeaderGatheringDetail(gatheringId);
 
   const isExplicitAdminView = mode === "admin" || (isUserAdmin && mode !== "leader");
@@ -125,6 +129,13 @@ export const GatheringDetailView: React.FC<GatheringDetailViewProps> = ({
 
   // Person status dropdown modal
   const [activePersonActionId, setActivePersonActionId] = useState<string | null>(null);
+
+  // Admin: Edit Gathering modal
+  const [isEditingGathering, setIsEditingGathering] = useState<boolean>(false);
+  const [editGatheringTitle, setEditGatheringTitle] = useState<string>("");
+  const [editGatheringDate, setEditGatheringDate] = useState<string>("");
+  const [editGatheringTime, setEditGatheringTime] = useState<string>("11:00");
+  const [editGatheringLocation, setEditGatheringLocation] = useState<string>("");
 
   // Admin: Edit Task modal
   const [editingTask, setEditingTask] = useState<{
@@ -542,17 +553,53 @@ export const GatheringDetailView: React.FC<GatheringDetailViewProps> = ({
     }
   };
 
+  // Admin: Edit Gathering handlers
+  const handleOpenEditGathering = () => {
+    if (!gathering) return;
+    const { date, time } = parseIsoToDateAndTime(gathering.startsAt);
+    setEditGatheringTitle(gathering.title);
+    setEditGatheringDate(date);
+    setEditGatheringTime(time);
+    setEditGatheringLocation(gathering.location || "");
+    setIsEditingGathering(true);
+  };
+
+  const handleSaveGathering = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!gathering) return;
+    if (!editGatheringTitle.trim()) {
+      showToast("Tittel kan ikke være tom.");
+      return;
+    }
+    if (!editGatheringDate) {
+      showToast("Dato må fylles ut.");
+      return;
+    }
+    const startsAt = combineDateAndTimeToIso(editGatheringDate, editGatheringTime || "11:00");
+    const res = updateGathering(gathering.id, {
+      title: editGatheringTitle.trim(),
+      startsAt,
+      location: editGatheringLocation.trim() || undefined,
+    });
+    if (res.success) {
+      showToast("Arrangementet ble oppdatert!");
+      setIsEditingGathering(false);
+    } else {
+      showToast(res.error || "Kunne ikke oppdatere arrangement.");
+    }
+  };
+
   // Print function
   const handlePrint = () => {
     window.print();
   };
 
   const backLink = isExplicitAdminView
-    ? "/admin?tab=samlinger"
+    ? "/admin?tab=arrangementer"
     : "/leder?tab=samlinger";
 
   const backLabel = isExplicitAdminView
-    ? "Tilbake til samlinger"
+    ? "Tilbake til arrangementer"
     : "Tilbake til samlingsoversikt";
 
   return (
@@ -585,15 +632,27 @@ export const GatheringDetailView: React.FC<GatheringDetailViewProps> = ({
 
           <div className="flex items-center gap-2">
             {canAdminister && (
-              <button
-                type="button"
-                id="btn-admin-add-task"
-                onClick={() => setIsCreatingTask(true)}
-                className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Ny oppgave</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  id="btn-admin-edit-gathering"
+                  onClick={handleOpenEditGathering}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200/90 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                  title="Rediger tittel, dato, tid og sted"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Rediger</span>
+                </button>
+                <button
+                  type="button"
+                  id="btn-admin-add-task"
+                  onClick={() => setIsCreatingTask(true)}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Ny oppgave</span>
+                </button>
+              </>
             )}
 
             <button
@@ -1507,6 +1566,107 @@ export const GatheringDetailView: React.FC<GatheringDetailViewProps> = ({
                   className="px-4 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs cursor-pointer"
                 >
                   Opprett oppgave
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Gathering Modal */}
+      {isEditingGathering && gathering && (
+        <div
+          id="modal-edit-gathering-detail"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150"
+        >
+          <div className="bg-white rounded-2xl max-w-md w-full p-4 border border-slate-200 shadow-xl space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <div className="flex items-center gap-1.5 text-slate-800 font-bold text-sm">
+                <Edit3 className="w-4 h-4 text-indigo-600" />
+                Rediger arrangement
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditingGathering(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveGathering} className="space-y-2.5 text-xs">
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-0.5">
+                  Tittel <span className="text-red-500">*</span>:
+                </label>
+                <input
+                  type="text"
+                  id="input-detail-edit-gathering-title"
+                  value={editGatheringTitle}
+                  onChange={(e) => setEditGatheringTitle(e.target.value)}
+                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-0.5">
+                    Dato <span className="text-red-500">*</span>:
+                  </label>
+                  <input
+                    type="date"
+                    id="input-detail-edit-gathering-date"
+                    value={editGatheringDate}
+                    onChange={(e) => setEditGatheringDate(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-0.5">
+                    Tid:
+                  </label>
+                  <input
+                    type="time"
+                    id="input-detail-edit-gathering-time"
+                    value={editGatheringTime}
+                    onChange={(e) => setEditGatheringTime(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-700 block mb-0.5">
+                  Sted:
+                </label>
+                <input
+                  type="text"
+                  id="input-detail-edit-gathering-location"
+                  value={editGatheringLocation}
+                  onChange={(e) => setEditGatheringLocation(e.target.value)}
+                  placeholder="F.eks. Hovedsalen"
+                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  id="btn-cancel-detail-edit-gathering"
+                  onClick={() => setIsEditingGathering(false)}
+                  className="px-2.5 py-1.5 text-xs text-slate-600 hover:text-slate-800 rounded-lg cursor-pointer"
+                >
+                  Avbryt
+                </button>
+                <button
+                  type="submit"
+                  id="btn-save-detail-edit-gathering"
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  Lagre endringer
                 </button>
               </div>
             </form>

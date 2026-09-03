@@ -114,6 +114,33 @@ export function formatCompactGatheringSubtitle(
   }
 }
 
+// Helpers for input date/time editing
+export function parseIsoToDateAndTime(isoString: string): { date: string; time: string } {
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return { date: "", time: "11:00" };
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    const hh = String(d.getHours()).padStart(2, "0");
+    const min = String(d.getMinutes()).padStart(2, "0");
+    return { date: `${yyyy}-${mm}-${dd}`, time: `${hh}:${min}` };
+  } catch {
+    return { date: "", time: "11:00" };
+  }
+}
+
+export function combineDateAndTimeToIso(dateStr: string, timeStr: string): string {
+  try {
+    const [yyyy, mm, dd] = dateStr.split("-").map(Number);
+    const [hh, min] = (timeStr || "11:00").split(":").map(Number);
+    const d = new Date(yyyy, mm - 1, dd, hh || 0, min || 0, 0);
+    return d.toISOString();
+  } catch {
+    return new Date().toISOString();
+  }
+}
+
 // 1. Hook: useCurrentUser
 export function useCurrentUser() {
   const { currentUser, allPersons, currentUserId, setCurrentUserId, getUserGroups } = useMockData();
@@ -338,8 +365,158 @@ export function useActionCardModel(task: Task, currentUser: Person): ActionCardM
   };
 }
 
-// 6. Bemanningsbarometer v0 & Gruppeleder helpers
+// 6. Bemanningsbarometer & Staffing Status helpers
 export type StaffingColor = "green" | "yellow" | "red";
+
+export interface TaskStaffingStatus {
+  color: StaffingColor;
+  statusText: string; // "Dekket" | "Mangler X" | "Venter på svar"
+  confirmedCount: number;
+  neededCount: number;
+  missingCount: number;
+  pendingCount: number;
+  hasForfall: boolean;
+  isFullyCovered: boolean;
+}
+
+/**
+ * Standardized 3-color staffing status for a single task:
+ * 🟢 Grønn = behovet er fullt dekket ("Dekket")
+ * 🔴 Rød = det mangler folk ("Mangler X")
+ * 🟡 Gul = forespurt, men ikke svart ("Venter på svar")
+ *
+ * Regler:
+ * 2/2 bekreftet → 🟢
+ * 1/2 bekreftet → 🔴
+ * 0/2 bekreftet + forespørsler som venter på svar → 🟡
+ * 1/2 bekreftet + 1 ubesvart forespørsel → 🔴
+ * Forfall som åpner en plass → 🔴
+ * Forfall + ny forespørsel → fortsatt 🔴 inntil plassen faktisk er dekket
+ * Først når hele behovet er dekket med bekreftede personer → 🟢
+ */
+export function calculateTaskStaffingStatus(
+  task: Task,
+  taskAssignments: Assignment[] = []
+): TaskStaffingStatus {
+  const needed = task.neededCount !== undefined ? task.neededCount : 1;
+
+  // If no assignments provided, synthesize from task.status fallback
+  if (taskAssignments.length === 0) {
+    if (task.status === "confirmed") {
+      return {
+        color: "green",
+        statusText: "Dekket",
+        confirmedCount: needed,
+        neededCount: needed,
+        missingCount: 0,
+        pendingCount: 0,
+        hasForfall: false,
+        isFullyCovered: true,
+      };
+    }
+    if (task.status === "vacant") {
+      return {
+        color: "red",
+        statusText: `Mangler ${needed}`,
+        confirmedCount: 0,
+        neededCount: needed,
+        missingCount: needed,
+        pendingCount: 0,
+        hasForfall: true,
+        isFullyCovered: false,
+      };
+    }
+    if (task.status === "assigned") {
+      return {
+        color: "yellow",
+        statusText: "Venter på svar",
+        confirmedCount: 0,
+        neededCount: needed,
+        missingCount: needed,
+        pendingCount: 1,
+        hasForfall: false,
+        isFullyCovered: false,
+      };
+    }
+    // "open"
+    return {
+      color: "red",
+      statusText: `Mangler ${needed}`,
+      confirmedCount: 0,
+      neededCount: needed,
+      missingCount: needed,
+      pendingCount: 0,
+      hasForfall: false,
+      isFullyCovered: false,
+    };
+  }
+
+  const confirmedCount = taskAssignments.filter((a) => a.response === "confirmed").length;
+  const pendingCount = taskAssignments.filter((a) => a.response === "pending").length;
+  const withdrawnCount = taskAssignments.filter((a) => a.response === "withdrawn").length;
+  const hasForfall = withdrawnCount > 0 || task.status === "vacant";
+
+  const missingCount = Math.max(0, needed - confirmedCount);
+  const isFullyCovered = confirmedCount >= needed;
+
+  if (isFullyCovered) {
+    return {
+      color: "green",
+      statusText: "Dekket",
+      confirmedCount,
+      neededCount: needed,
+      missingCount: 0,
+      pendingCount,
+      hasForfall: false,
+      isFullyCovered: true,
+    };
+  }
+
+  // Not fully covered:
+  // - Forfall som åpner en plass -> 🔴
+  // - Forfall + ny forespørsel -> fortsatt 🔴 inntil plassen faktisk er dekket
+  // - 1/2 bekreftet -> 🔴
+  // - 1/2 bekreftet + 1 ubesvart forespørsel -> 🔴
+  if (hasForfall || confirmedCount > 0) {
+    return {
+      color: "red",
+      statusText: `Mangler ${missingCount}`,
+      confirmedCount,
+      neededCount: needed,
+      missingCount,
+      pendingCount,
+      hasForfall: true,
+      isFullyCovered: false,
+    };
+  }
+
+  // confirmedCount === 0:
+  // 0/2 bekreftet + forespørsler som venter på svar -> 🟡
+  if (pendingCount > 0) {
+    return {
+      color: "yellow",
+      statusText: "Venter på svar",
+      confirmedCount: 0,
+      neededCount: needed,
+      missingCount,
+      pendingCount,
+      hasForfall: false,
+      isFullyCovered: false,
+    };
+  }
+
+  // 0 bekreftet, 0 venter -> 🔴 Mangler X
+  return {
+    color: "red",
+    statusText: `Mangler ${missingCount}`,
+    confirmedCount: 0,
+    neededCount: needed,
+    missingCount,
+    pendingCount: 0,
+    hasForfall: false,
+    isFullyCovered: false,
+  };
+}
 
 export interface StaffingStatusResult {
   color: StaffingColor;
@@ -349,71 +526,93 @@ export interface StaffingStatusResult {
   coveredCount: number;
   vacantCount: number;
   openCount: number;
+  missingPeopleCount: number;
+  pendingCount: number;
   needsAttention: boolean;
 }
 
 /**
- * Bemanningsbarometer v0:
- * Utled farge basert på eksisterende statusverdier med fast prioritetsrekkefølge:
- * 1. vacant -> RØD (Trenger oppfølging / forfall)
- * 2. ellers open -> GUL (Ledig oppgave / ubesatt)
- * 3. ellers eksisterende "tatt/bekreftet" (confirmed/assigned) -> GRØNN (Alt er dekket)
+ * Standardized 3-color staffing status for a gathering (collection of tasks):
+ * 🟢 Grønn = behovet er fullt dekket ("Dekket")
+ * 🔴 Rød = det mangler folk ("Mangler X")
+ * 🟡 Gul = forespurt, men ikke svart ("Venter på svar")
  */
-export function getStaffingStatus(tasksForGathering: Task[]): StaffingStatusResult {
+export function getStaffingStatus(
+  tasksForGathering: Task[],
+  assignments: Assignment[] = []
+): StaffingStatusResult {
   const totalTasks = tasksForGathering.length;
   if (totalTasks === 0) {
     return {
       color: "green",
       label: "Ingen oppgaver",
-      badgeText: "Ingen oppgaver",
+      badgeText: "Dekket",
       totalTasks: 0,
       coveredCount: 0,
       vacantCount: 0,
       openCount: 0,
+      missingPeopleCount: 0,
+      pendingCount: 0,
       needsAttention: false,
     };
   }
 
-  const vacantCount = tasksForGathering.filter((t) => t.status === "vacant").length;
-  const openCount = tasksForGathering.filter((t) => t.status === "open").length;
-  const coveredCount = tasksForGathering.filter(
-    (t) => t.status === "confirmed" || t.status === "assigned"
-  ).length;
+  const taskStatuses = tasksForGathering.map((task) => {
+    const taskAssigns = assignments.length > 0
+      ? assignments.filter((a) => a.taskId === task.id)
+      : [];
+    return calculateTaskStaffingStatus(task, taskAssigns);
+  });
 
-  if (vacantCount > 0) {
+  const totalMissing = taskStatuses.reduce((sum, s) => sum + s.missingCount, 0);
+  const totalPending = taskStatuses.reduce((sum, s) => sum + s.pendingCount, 0);
+  const coveredCount = taskStatuses.filter((s) => s.isFullyCovered).length;
+  const vacantCount = taskStatuses.filter((s) => s.hasForfall).length;
+  const openCount = taskStatuses.filter((s) => !s.isFullyCovered && !s.hasForfall).length;
+
+  const hasRed = taskStatuses.some((s) => s.color === "red");
+  const hasYellow = taskStatuses.some((s) => s.color === "yellow");
+
+  if (hasRed) {
     return {
       color: "red",
-      label: "Trenger oppfølging",
-      badgeText: "Trenger vikar",
+      label: `Mangler ${totalMissing}`,
+      badgeText: `Mangler ${totalMissing}`,
       totalTasks,
       coveredCount,
       vacantCount,
       openCount,
+      missingPeopleCount: totalMissing,
+      pendingCount: totalPending,
       needsAttention: true,
     };
   }
 
-  if (openCount > 0) {
+  if (hasYellow) {
     return {
       color: "yellow",
-      label: "Mangler frivillig",
-      badgeText: "Ledig oppgave",
+      label: "Venter på svar",
+      badgeText: "Venter på svar",
       totalTasks,
       coveredCount,
       vacantCount,
       openCount,
+      missingPeopleCount: totalMissing,
+      pendingCount: totalPending,
       needsAttention: false,
     };
   }
 
   return {
     color: "green",
-    label: "Alt er dekket",
+    label: "Dekket",
     badgeText: "Dekket",
     totalTasks,
     coveredCount,
     vacantCount,
     openCount,
+    missingPeopleCount: 0,
+    pendingCount: 0,
     needsAttention: false,
   };
 }
@@ -436,7 +635,7 @@ export interface LeaderGroupData {
 
 // 7. Hook: useLeaderDashboard
 export function useLeaderDashboard() {
-  const { currentUser, groups, gatherings, tasks, allPersons, assignTaskToPerson } = useMockData();
+  const { currentUser, groups, gatherings, tasks, assignments, allPersons, assignTaskToPerson } = useMockData();
 
   // Find groups where current user's ID exists in group.leaderIds OR group.deputyLeaderIds
   const leaderGroups = useMemo(() => {
@@ -470,7 +669,7 @@ export function useLeaderDashboard() {
 
       const gatheringItems: LeaderGatheringItem[] = groupGatherings.map((gathering) => {
         const tasksForGathering = groupTasks.filter((t) => t.gatheringId === gathering.id);
-        const staffing = getStaffingStatus(tasksForGathering);
+        const staffing = getStaffingStatus(tasksForGathering, assignments);
         return {
           gathering,
           group,
@@ -491,7 +690,7 @@ export function useLeaderDashboard() {
         needsAttention: totalVacantTasks > 0,
       };
     });
-  }, [leaderGroups, gatherings, tasks, allPersons]);
+  }, [leaderGroups, gatherings, tasks, assignments, allPersons]);
 
   // All semester gatherings across leader's groups (consolidated)
   const allSemesterGatherings = useMemo(() => {
@@ -510,7 +709,7 @@ export function useLeaderDashboard() {
     return relevantGatherings.map((gathering) => {
       const tasksForGathering = leaderTasks.filter((t) => t.gatheringId === gathering.id);
       const group = groups.find((g) => g.id === gathering.groupId) || leaderGroups[0];
-      const staffing = getStaffingStatus(tasksForGathering);
+      const staffing = getStaffingStatus(tasksForGathering, assignments);
       return {
         gathering,
         group,
@@ -518,7 +717,7 @@ export function useLeaderDashboard() {
         staffing,
       };
     });
-  }, [leaderGroups, gatherings, tasks, groups]);
+  }, [leaderGroups, gatherings, tasks, assignments, groups]);
 
   // Urgent tasks across leader's groups
   const urgentTasks = useMemo(() => {
@@ -596,6 +795,7 @@ export function useAdminDashboard() {
     assignments,
     updateGroupName,
     updateGroup,
+    createGroup,
     addPerson,
     updatePerson,
     getGroupById,
@@ -603,6 +803,9 @@ export function useAdminDashboard() {
     getPersonById,
     getAssignmentForTask,
     getAllAssignmentsForTask,
+    createGathering,
+    updateGathering,
+    deleteGathering,
   } = useMockData();
 
   const isAdmin = currentUser.globalRole === "admin";
@@ -638,49 +841,47 @@ export function useAdminDashboard() {
   }, [groups, allPersons, tasks]);
 
   const adminGatherings = useMemo(() => {
-    return gatherings.map((gathering) => {
-      const group = getGroupById(gathering.groupId);
-      const gatheringTasks = tasks.filter((t) => t.gatheringId === gathering.id);
-      const staffing = getStaffingStatus(gatheringTasks);
+    return gatherings
+      .filter((gathering) => {
+        const group = getGroupById(gathering.groupId);
+        // Exclude Husfellesskap from Admin -> Arrangementer list
+        return group?.category !== "husgruppe";
+      })
+      .map((gathering) => {
+        const group = getGroupById(gathering.groupId);
+        const gatheringTasks = tasks.filter((t) => t.gatheringId === gathering.id);
+        const staffing = getStaffingStatus(gatheringTasks, assignments);
 
-      // Detailed counts for admin gathering overview
-      const totalTasks = gatheringTasks.length;
-      let coveredTasksCount = 0;
-      let missingStaffingCount = 0;
+        // Detailed counts for admin gathering overview
+        const totalTasks = gatheringTasks.length;
+        let coveredTasksCount = 0;
+        let missingStaffingCount = 0;
 
-      gatheringTasks.forEach((task) => {
-        const taskAssignments = assignments.filter(
-          (a) => a.taskId === task.id && a.response === "confirmed"
-        );
-        const confirmedPeople = taskAssignments.length;
-        const needed = task.neededCount;
-
-        if (needed !== undefined && needed > 0) {
-          if (confirmedPeople >= needed) {
+        const tasksWithStaffing = gatheringTasks.map((task) => {
+          const taskAssignments = assignments.filter((a) => a.taskId === task.id);
+          const taskStaffing = calculateTaskStaffingStatus(task, taskAssignments);
+          if (taskStaffing.isFullyCovered) {
             coveredTasksCount++;
           } else {
-            missingStaffingCount += needed - confirmedPeople;
+            missingStaffingCount += taskStaffing.missingCount;
           }
-        } else {
-          // If neededCount is not set, use status
-          if (task.status === "confirmed") {
-            coveredTasksCount++;
-          } else {
-            missingStaffingCount += 1;
-          }
-        }
+          return {
+            task,
+            taskStaffing,
+          };
+        });
+
+        return {
+          gathering,
+          group,
+          tasks: gatheringTasks,
+          tasksWithStaffing,
+          totalTasks,
+          coveredTasksCount,
+          missingStaffingCount,
+          staffing,
+        };
       });
-
-      return {
-        gathering,
-        group,
-        tasks: gatheringTasks,
-        totalTasks,
-        coveredTasksCount,
-        missingStaffingCount,
-        staffing,
-      };
-    });
   }, [gatherings, tasks, assignments, getGroupById]);
 
   const adminTasks = useMemo(() => {
@@ -706,18 +907,7 @@ export function useAdminDashboard() {
         };
       });
 
-      const confirmedCount = taskAssignments.filter((a) => a.response === "confirmed").length;
-      const isFullyCovered =
-        task.neededCount !== undefined
-          ? confirmedCount >= task.neededCount
-          : task.status === "confirmed";
-
-      const missingCount =
-        task.neededCount !== undefined
-          ? Math.max(0, task.neededCount - confirmedCount)
-          : task.status === "confirmed"
-          ? 0
-          : 1;
+      const taskStaffing = calculateTaskStaffingStatus(task, taskAssignments);
 
       return {
         task,
@@ -726,9 +916,10 @@ export function useAdminDashboard() {
         assignment: primaryAssignment,
         assignedPerson,
         assignedPersonsList,
-        confirmedCount,
-        isFullyCovered,
-        missingCount,
+        confirmedCount: taskStaffing.confirmedCount,
+        isFullyCovered: taskStaffing.isFullyCovered,
+        missingCount: taskStaffing.missingCount,
+        taskStaffing,
       };
     });
   }, [tasks, assignments, getGatheringById, getGroupById, getAssignmentForTask, getPersonById]);
@@ -743,8 +934,12 @@ export function useAdminDashboard() {
     adminTasks,
     updateGroupName,
     updateGroup,
+    createGroup,
     addPerson,
     updatePerson,
+    createGathering,
+    updateGathering,
+    deleteGathering,
   };
 }
 
@@ -770,6 +965,7 @@ export function useAdminGatheringDetail(gatheringId: string) {
     updateTask,
     createTask,
     deleteTask,
+    updateGathering,
   } = useMockData();
 
   const isAdmin = currentUser.globalRole === "admin";
@@ -856,6 +1052,7 @@ export function useAdminGatheringDetail(gatheringId: string) {
     updateTask,
     createTask,
     deleteTask,
+    updateGathering,
   };
 }
 
@@ -867,6 +1064,7 @@ export function useAdminGroupDetail(groupId: string) {
     groups,
     gatherings,
     tasks,
+    assignments,
     getGroupById,
     updateGroup,
     addGroupMember,
@@ -902,14 +1100,14 @@ export function useAdminGroupDetail(groupId: string) {
       .filter((g) => g.groupId === group.id)
       .map((gathering) => {
         const gatheringTasks = tasks.filter((t) => t.gatheringId === gathering.id);
-        const staffing = getStaffingStatus(gatheringTasks);
+        const staffing = getStaffingStatus(gatheringTasks, assignments);
         return {
           gathering,
           tasks: gatheringTasks,
           staffing,
         };
       });
-  }, [group, gatherings, tasks]);
+  }, [group, gatherings, tasks, assignments]);
 
   return {
     isAdmin,
@@ -1066,6 +1264,23 @@ export function useAdminTaskDetail(taskId: string) {
     return task.status === "confirmed" ? 0 : 1;
   }, [task, confirmedCount]);
 
+  const taskStaffing = useMemo(() => {
+    if (!task) {
+      return {
+        color: "green" as StaffingColor,
+        statusText: "Dekket",
+        confirmedCount: 0,
+        neededCount: 0,
+        missingCount: 0,
+        pendingCount: 0,
+        hasForfall: false,
+        isFullyCovered: true,
+      };
+    }
+    const taskAssigns = getAllAssignmentsForTask(task.id);
+    return calculateTaskStaffingStatus(task, taskAssigns);
+  }, [task, getAllAssignmentsForTask, assignments]);
+
   const handleUpdateInstruction = useCallback(
     (instruction: string) => {
       if (!task) return { success: false, error: "Ingen oppgave valgt." };
@@ -1094,6 +1309,7 @@ export function useAdminTaskDetail(taskId: string) {
     confirmedCount,
     isFullyCovered,
     missingCount,
+    taskStaffing,
     updateTask,
     updateTaskInstruction: handleUpdateInstruction,
     updateTaskNeededCount: handleUpdateNeededCount,
@@ -1172,7 +1388,7 @@ export function useLeaderGroupDetail(groupId: string) {
       .filter((g) => relevantGatheringIds.has(g.id))
       .map((gathering) => {
         const gatheringTasks = groupTasks.filter((t) => t.gatheringId === gathering.id);
-        const staffing = getStaffingStatus(gatheringTasks);
+        const staffing = getStaffingStatus(gatheringTasks, assignments);
 
         // Detailed task items with assignments
         const taskItems = gatheringTasks.map((task) => {
@@ -1192,10 +1408,11 @@ export function useLeaderGroupDetail(groupId: string) {
             };
           });
 
-          const confirmedCount = taskAssignments.filter((a) => a.response === "confirmed").length;
-          const neededCount = task.neededCount || 1;
-          const isFullyCovered = confirmedCount >= neededCount;
-          const hasForfall = taskAssignments.some((a) => a.response === "withdrawn") || task.status === "vacant";
+          const taskStaffing = calculateTaskStaffingStatus(task, taskAssignments);
+          const confirmedCount = taskStaffing.confirmedCount;
+          const neededCount = taskStaffing.neededCount;
+          const isFullyCovered = taskStaffing.isFullyCovered;
+          const hasForfall = taskStaffing.hasForfall;
 
           return {
             task,
@@ -1204,6 +1421,7 @@ export function useLeaderGroupDetail(groupId: string) {
             neededCount,
             isFullyCovered,
             hasForfall,
+            taskStaffing,
           };
         });
 
@@ -1289,6 +1507,7 @@ export function useLeaderGatheringDetail(gatheringId: string) {
     updateTask,
     createTask,
     deleteTask,
+    updateGathering,
   } = useMockData();
 
   const gathering = useMemo(() => {
@@ -1368,21 +1587,14 @@ export function useLeaderGatheringDetail(gatheringId: string) {
         };
       });
 
-      const confirmedPersonsCount = taskAssignments.filter((a) => a.response === "confirmed").length;
-      const neededCount = task.neededCount || 1;
-      const isFullyCovered = confirmedPersonsCount >= neededCount;
-      const hasWithdrawn = taskAssignments.some((a) => a.response === "withdrawn");
-      const missingCount = Math.max(0, neededCount - confirmedPersonsCount);
+      const taskStaffing = calculateTaskStaffingStatus(task, taskAssignments);
+      const confirmedPersonsCount = taskStaffing.confirmedCount;
+      const neededCount = taskStaffing.neededCount;
+      const isFullyCovered = taskStaffing.isFullyCovered;
+      const hasWithdrawn = taskStaffing.hasForfall;
+      const missingCount = taskStaffing.missingCount;
       const isMyGroup = Boolean(group && task.groupId === group.id);
-
-      let staffingStatusLabel = "Behov ikke satt";
-      if (isFullyCovered) {
-        staffingStatusLabel = "Fullt dekket";
-      } else if (hasWithdrawn || task.status === "vacant") {
-        staffingStatusLabel = "Forfall / Trenger vikar";
-      } else {
-        staffingStatusLabel = `Mangler ${missingCount} frivillig`;
-      }
+      const staffingStatusLabel = taskStaffing.statusText;
 
       return {
         task,
@@ -1395,6 +1607,7 @@ export function useLeaderGatheringDetail(gatheringId: string) {
         missingCount,
         hasWithdrawn,
         staffingStatusLabel,
+        taskStaffing,
       };
     });
   }, [gathering, gatheringTasks, assignments, getPersonById, getGroupById, group]);
@@ -1439,6 +1652,7 @@ export function useLeaderGatheringDetail(gatheringId: string) {
     createTask,
     deleteTask,
     allGroups: groups,
+    updateGathering,
   };
 }
 

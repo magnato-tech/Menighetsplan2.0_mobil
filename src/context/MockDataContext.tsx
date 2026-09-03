@@ -54,7 +54,7 @@ export interface MockDataContextType {
 
   // Actions
   createGathering: (data: {
-    groupId: string;
+    groupId?: string;
     title: string;
     startsAt: string;
     location?: string;
@@ -74,6 +74,12 @@ export interface MockDataContextType {
   updateTaskStatus: (taskId: string, status: Task["status"]) => { success: boolean; error?: string };
   updateGroupName: (groupId: string, newName: string) => { success: boolean; error?: string };
   updateGroup: (groupId: string, updates: Partial<Group>) => { success: boolean; error?: string };
+  createGroup: (data: {
+    name: string;
+    category?: GroupCategory;
+    leaderIds?: string[];
+    memberIds?: string[];
+  }) => { success: boolean; group?: Group; error?: string };
   addPerson: (data: { name: string; phone?: string; email?: string }) => { success: boolean; person?: Person; error?: string };
   updatePerson: (personId: string, updates: Partial<Person>) => { success: boolean; error?: string };
   addGroupMember: (groupId: string, personId: string) => { success: boolean; error?: string };
@@ -476,6 +482,34 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     [updateGroup]
   );
 
+  // Admin Action: Create Group
+  const createGroup = useCallback(
+    (data: {
+      name: string;
+      category?: GroupCategory;
+      leaderIds?: string[];
+      memberIds?: string[];
+    }): { success: boolean; group?: Group; error?: string } => {
+      const trimmedName = data.name.trim();
+      if (!trimmedName) {
+        return { success: false, error: "Gruppenavn kan ikke være tomt." };
+      }
+
+      const newId = `group-${Date.now()}`;
+      const newGroup: Group = {
+        id: newId,
+        name: trimmedName,
+        category: data.category || "tjenestegruppe",
+        memberIds: data.memberIds || [],
+        leaderIds: data.leaderIds || [],
+      };
+
+      setGroups((prev) => [...prev, newGroup]);
+      return { success: true, group: newGroup };
+    },
+    []
+  );
+
   // Admin Action: Add Person
   const addPerson = useCallback(
     (data: { name: string; phone?: string; email?: string }): { success: boolean; person?: Person; error?: string } => {
@@ -835,7 +869,7 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const createGathering = useCallback(
     (data: {
-      groupId: string;
+      groupId?: string;
       title: string;
       startsAt: string;
       location?: string;
@@ -845,16 +879,21 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       hostPersonId?: string;
       sendInvitationImmediately?: boolean;
     }): { success: boolean; gathering?: Gathering; error?: string } => {
-      if (!data.groupId || !data.title || !data.startsAt) {
-        return { success: false, error: "Mangler obligatoriske felt (gruppe, tittel, dato)" };
+      const targetGroupId =
+        data.groupId ||
+        groups.find((g) => g.category !== "husgruppe")?.id ||
+        groups[0]?.id ||
+        "group-felles";
+      if (!data.title || !data.startsAt) {
+        return { success: false, error: "Mangler obligatoriske felt (tittel, dato)" };
       }
       const newGathering: Gathering = {
         id: `gathering-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-        groupId: data.groupId,
+        groupId: targetGroupId,
         title: data.title,
         startsAt: data.startsAt,
         location: data.location,
-        type: data.type || "gruppesamling",
+        type: data.type || "arrangement",
         theme: data.theme,
         bibleText: data.bibleText,
         hostPersonId: data.hostPersonId,
@@ -864,7 +903,7 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setGatherings((prev) => [...prev, newGathering]);
       return { success: true, gathering: newGathering };
     },
-    []
+    [groups]
   );
 
   const updateGathering = useCallback(
@@ -991,6 +1030,7 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       updateTaskStatus,
       updateGroupName,
       updateGroup,
+      createGroup,
       addPerson,
       updatePerson,
       addGroupMember,
@@ -1046,6 +1086,7 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       updateTaskStatus,
       updateGroupName,
       updateGroup,
+      createGroup,
       addPerson,
       updatePerson,
       addGroupMember,
