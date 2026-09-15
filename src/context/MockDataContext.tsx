@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useMemo, useCallback } from "react";
-import { Person, Group, Gathering, Task, Assignment, GroupMessage, GatheringAttendance } from "../types";
+import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from "react";
+import { Person, Group, Gathering, Task, Assignment, GroupMessage, GatheringAttendance, GroupCategory, MeetingSchedule } from "../types";
 import {
   initialPersons,
   initialGroups,
@@ -9,6 +9,32 @@ import {
   initialGroupMessages,
   initialGatheringAttendances,
 } from "../data/mockData";
+import {
+  seedFirestoreIfEmpty,
+  subscribeToPersons,
+  subscribeToGroups,
+  subscribeToGatherings,
+  subscribeToTasks,
+  subscribeToAssignments,
+  subscribeToGroupMessages,
+  subscribeToAttendances,
+  savePersonToFirestore,
+  updatePersonInFirestore,
+  saveGroupToFirestore,
+  updateGroupInFirestore,
+  saveGatheringToFirestore,
+  updateGatheringInFirestore,
+  deleteGatheringFromFirestore,
+  saveTaskToFirestore,
+  updateTaskInFirestore,
+  deleteTaskFromFirestore,
+  saveAssignmentToFirestore,
+  updateAssignmentInFirestore,
+  deleteAssignmentFromFirestore,
+  saveGroupMessageToFirestore,
+  deleteGroupMessageFromFirestore,
+  saveAttendanceToFirestore,
+} from "../services/firestoreService";
 
 export interface ModuleConfig {
   kalender: "on" | "off";
@@ -17,6 +43,7 @@ export interface ModuleConfig {
 
 export interface MockDataContextType {
   // State
+  isFirestoreConnected: boolean;
   currentUser: Person;
   allPersons: Person[];
   currentUserId: string;
@@ -78,7 +105,9 @@ export interface MockDataContextType {
     name: string;
     category?: GroupCategory;
     leaderIds?: string[];
+    deputyLeaderIds?: string[];
     memberIds?: string[];
+    meetingSchedule?: MeetingSchedule;
   }) => { success: boolean; group?: Group; error?: string };
   addPerson: (data: { name: string; phone?: string; email?: string }) => { success: boolean; person?: Person; error?: string };
   updatePerson: (personId: string, updates: Partial<Person>) => { success: boolean; error?: string };
@@ -105,6 +134,84 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [assignments, setAssignments] = useState<Assignment[]>(initialAssignments);
   const [groupMessages, setGroupMessages] = useState<GroupMessage[]>(initialGroupMessages);
   const [attendances, setAttendances] = useState<GatheringAttendance[]>(initialGatheringAttendances);
+  const [isFirestoreConnected, setIsFirestoreConnected] = useState<boolean>(false);
+
+  // Synchronize with Firestore real-time database
+  useEffect(() => {
+    let isMounted = true;
+    let unsubPersons: (() => void) | undefined;
+    let unsubGroups: (() => void) | undefined;
+    let unsubGatherings: (() => void) | undefined;
+    let unsubTasks: (() => void) | undefined;
+    let unsubAssignments: (() => void) | undefined;
+    let unsubMessages: (() => void) | undefined;
+    let unsubAttendances: (() => void) | undefined;
+
+    async function initFirestore() {
+      try {
+        await seedFirestoreIfEmpty();
+        if (!isMounted) return;
+        setIsFirestoreConnected(true);
+
+        unsubPersons = subscribeToPersons((remotePersons) => {
+          if (remotePersons && remotePersons.length > 0) {
+            setPersons(remotePersons);
+          }
+        });
+
+        unsubGroups = subscribeToGroups((remoteGroups) => {
+          if (remoteGroups && remoteGroups.length > 0) {
+            setGroups(remoteGroups);
+          }
+        });
+
+        unsubGatherings = subscribeToGatherings((remoteGatherings) => {
+          if (remoteGatherings && remoteGatherings.length > 0) {
+            setGatherings(remoteGatherings);
+          }
+        });
+
+        unsubTasks = subscribeToTasks((remoteTasks) => {
+          if (remoteTasks && remoteTasks.length > 0) {
+            setTasks(remoteTasks);
+          }
+        });
+
+        unsubAssignments = subscribeToAssignments((remoteAssignments) => {
+          if (remoteAssignments) {
+            setAssignments(remoteAssignments);
+          }
+        });
+
+        unsubMessages = subscribeToGroupMessages((remoteMessages) => {
+          if (remoteMessages) {
+            setGroupMessages(remoteMessages);
+          }
+        });
+
+        unsubAttendances = subscribeToAttendances((remoteAttendances) => {
+          if (remoteAttendances) {
+            setAttendances(remoteAttendances);
+          }
+        });
+      } catch (err) {
+        console.warn("Firestore connection check notice:", err);
+      }
+    }
+
+    initFirestore();
+
+    return () => {
+      isMounted = false;
+      unsubPersons?.();
+      unsubGroups?.();
+      unsubGatherings?.();
+      unsubTasks?.();
+      unsubAssignments?.();
+      unsubMessages?.();
+      unsubAttendances?.();
+    };
+  }, []);
 
   // Module configuration state - default is both 'off'
   const [moduleConfig, setModuleConfig] = useState<ModuleConfig>({
@@ -240,6 +347,7 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       // Upsert assignment for this (taskId, personId)
       let newAssignments: Assignment[] = [];
+      let savedAssignment: Assignment | null = null;
       setAssignments((prev) => {
         const existingIdx = prev.findIndex((a) => a.taskId === taskId && a.personId === personId);
         const newAssignment: Assignment = {
@@ -248,6 +356,7 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           personId,
           response: responseStatus,
         };
+        savedAssignment = newAssignment;
 
         if (existingIdx >= 0) {
           const updated = [...prev];
@@ -261,6 +370,12 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       });
 
+      if (savedAssignment) {
+        saveAssignmentToFirestore(savedAssignment).catch((err) => {
+          console.error("Failed to save assignment to Firestore:", err);
+        });
+      }
+
       // Update task status based on confirmed assignments vs neededCount
       setTasks((prev) =>
         prev.map((t) => {
@@ -270,15 +385,22 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             const needed = t.neededCount || 1;
             const hasWithdrawn = taskAssignments.some((a) => a.response === "withdrawn");
 
+            let nextStatus: Task["status"] = "open";
             if (confirmedCount >= needed) {
-              return { ...t, status: "confirmed" };
+              nextStatus = "confirmed";
             } else if (hasWithdrawn && confirmedCount === 0) {
-              return { ...t, status: "vacant" };
+              nextStatus = "vacant";
             } else if (confirmedCount > 0) {
-              return { ...t, status: "assigned" };
+              nextStatus = "assigned";
             } else {
-              return { ...t, status: responseStatus === "pending" ? "open" : "confirmed" };
+              nextStatus = responseStatus === "pending" ? "open" : "confirmed";
             }
+
+            updateTaskInFirestore(taskId, { status: nextStatus }).catch((err) => {
+              console.error("Failed to update task status in Firestore:", err);
+            });
+
+            return { ...t, status: nextStatus };
           }
           return t;
         })
@@ -304,6 +426,10 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return next;
       });
 
+      updateAssignmentInFirestore(assignmentId, { response }).catch((err) => {
+        console.error("Failed to update assignment in Firestore:", err);
+      });
+
       // Recalculate parent task status
       setTasks((prev) =>
         prev.map((t) => {
@@ -313,15 +439,22 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             const needed = t.neededCount || 1;
             const hasWithdrawn = taskAssigns.some((a) => a.response === "withdrawn");
 
+            let nextStatus: Task["status"] = "open";
             if (confirmedCount >= needed) {
-              return { ...t, status: "confirmed" };
+              nextStatus = "confirmed";
             } else if (response === "withdrawn" || (hasWithdrawn && confirmedCount === 0)) {
-              return { ...t, status: "vacant" };
+              nextStatus = "vacant";
             } else if (confirmedCount > 0) {
-              return { ...t, status: "assigned" };
+              nextStatus = "assigned";
             } else {
-              return { ...t, status: "open" };
+              nextStatus = "open";
             }
+
+            updateTaskInFirestore(t.id, { status: nextStatus }).catch((err) => {
+              console.error("Failed to update task in Firestore:", err);
+            });
+
+            return { ...t, status: nextStatus };
           }
           return t;
         })
@@ -348,6 +481,10 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return next;
       });
 
+      deleteAssignmentFromFirestore(assignmentId).catch((err) => {
+        console.error("Failed to delete assignment from Firestore:", err);
+      });
+
       // Recalculate parent task status
       setTasks((prev) =>
         prev.map((t) => {
@@ -356,13 +493,20 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             const confirmedCount = taskAssigns.filter((a) => a.response === "confirmed").length;
             const needed = t.neededCount || 1;
 
+            let nextStatus: Task["status"] = "open";
             if (confirmedCount >= needed) {
-              return { ...t, status: "confirmed" };
+              nextStatus = "confirmed";
             } else if (confirmedCount > 0) {
-              return { ...t, status: "assigned" };
+              nextStatus = "assigned";
             } else {
-              return { ...t, status: "open" };
+              nextStatus = "open";
             }
+
+            updateTaskInFirestore(taskId, { status: nextStatus }).catch((err) => {
+              console.error("Failed to update task status in Firestore:", err);
+            });
+
+            return { ...t, status: nextStatus };
           }
           return t;
         })
@@ -377,6 +521,9 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const updateTaskStatus = useCallback(
     (taskId: string, status: Task["status"]): { success: boolean; error?: string } => {
       setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status } : t)));
+      updateTaskInFirestore(taskId, { status }).catch((err) => {
+        console.error("Failed to update task status in Firestore:", err);
+      });
       return { success: true };
     },
     []
@@ -417,8 +564,12 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setTasks((prev) =>
         prev.map((t) => (t.id === taskId ? { ...t, status: "vacant" } : t))
       );
+      updateTaskInFirestore(taskId, { status: "vacant" }).catch((err) => {
+        console.error("Failed to update task status in Firestore:", err);
+      });
 
       // Mark assignment response as 'withdrawn'
+      const targetAssign = assignments.find((a) => a.taskId === taskId && a.personId === personId);
       setAssignments((prev) =>
         prev.map((a) =>
           a.taskId === taskId && a.personId === personId
@@ -426,6 +577,11 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             : a
         )
       );
+      if (targetAssign) {
+        updateAssignmentInFirestore(targetAssign.id, { response: "withdrawn" }).catch((err) => {
+          console.error("Failed to update assignment status in Firestore:", err);
+        });
+      }
 
       // Post system message to the relevant group chat
       if (task.groupId) {
@@ -443,11 +599,14 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         };
 
         setGroupMessages((prev) => [...prev, newSystemMessage]);
+        saveGroupMessageToFirestore(newSystemMessage).catch((err) => {
+          console.error("Failed to save absence message to Firestore:", err);
+        });
       }
 
       return { success: true };
     },
-    [tasks, persons, gatherings]
+    [tasks, persons, gatherings, assignments]
   );
 
   // Admin Action: Update group (name, category, leaderIds, deputyLeaderIds, meetingSchedule)
@@ -469,6 +628,9 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           return g;
         })
       );
+      updateGroupInFirestore(groupId, updates).catch((err) => {
+        console.error("Failed to update group in Firestore:", err);
+      });
       return { success: true };
     },
     []
@@ -488,7 +650,9 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       name: string;
       category?: GroupCategory;
       leaderIds?: string[];
+      deputyLeaderIds?: string[];
       memberIds?: string[];
+      meetingSchedule?: MeetingSchedule;
     }): { success: boolean; group?: Group; error?: string } => {
       const trimmedName = data.name.trim();
       if (!trimmedName) {
@@ -496,15 +660,37 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
 
       const newId = `group-${Date.now()}`;
+      const leaderIds = data.leaderIds || [];
+      const deputyLeaderIds = data.deputyLeaderIds || [];
+      const combinedMembers = Array.from(
+        new Set([...(data.memberIds || []), ...leaderIds, ...deputyLeaderIds])
+      );
+
+      const nowIso = new Date().toISOString();
+      const memberJoinedAt: Record<string, string> = {};
+      const notificationPreferences: Record<string, boolean> = {};
+      combinedMembers.forEach((mId) => {
+        memberJoinedAt[mId] = nowIso;
+        notificationPreferences[mId] = true;
+      });
+
       const newGroup: Group = {
         id: newId,
         name: trimmedName,
         category: data.category || "tjenestegruppe",
-        memberIds: data.memberIds || [],
-        leaderIds: data.leaderIds || [],
+        memberIds: combinedMembers,
+        leaderIds,
+        deputyLeaderIds: deputyLeaderIds.length > 0 ? deputyLeaderIds : undefined,
+        meetingSchedule: data.meetingSchedule,
+        memberJoinedAt,
+        notificationPreferences,
       };
 
       setGroups((prev) => [...prev, newGroup]);
+      saveGroupToFirestore(newGroup).catch((err) => {
+        console.error("Failed to save group to Firestore:", err);
+      });
+
       return { success: true, group: newGroup };
     },
     []
@@ -528,6 +714,10 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       };
 
       setPersons((prev) => [...prev, newPerson]);
+      savePersonToFirestore(newPerson).catch((err) => {
+        console.error("Failed to save person to Firestore:", err);
+      });
+
       return { success: true, person: newPerson };
     },
     []
@@ -554,6 +744,10 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           return p;
         })
       );
+      updatePersonInFirestore(personId, updates).catch((err) => {
+        console.error("Failed to update person in Firestore:", err);
+      });
+
       return { success: true };
     },
     []
@@ -562,11 +756,12 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Admin Action: Add Group Member
   const addGroupMember = useCallback(
     (groupId: string, personId: string): { success: boolean; error?: string } => {
+      let updatedGroup: Group | undefined;
       setGroups((prev) =>
         prev.map((g) => {
           if (g.id === groupId) {
             if (g.memberIds.includes(personId)) return g;
-            return {
+            const updated = {
               ...g,
               memberIds: [...g.memberIds, personId],
               memberJoinedAt: {
@@ -578,10 +773,23 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 [personId]: true,
               },
             };
+            updatedGroup = updated;
+            return updated;
           }
           return g;
         })
       );
+
+      if (updatedGroup) {
+        updateGroupInFirestore(groupId, {
+          memberIds: updatedGroup.memberIds,
+          memberJoinedAt: updatedGroup.memberJoinedAt,
+          notificationPreferences: updatedGroup.notificationPreferences,
+        }).catch((err) => {
+          console.error("Failed to sync added group member to Firestore:", err);
+        });
+      }
+
       return { success: true };
     },
     []
@@ -590,19 +798,33 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Admin Action: Remove Group Member
   const removeGroupMember = useCallback(
     (groupId: string, personId: string): { success: boolean; error?: string } => {
+      let updatedGroup: Group | undefined;
       setGroups((prev) =>
         prev.map((g) => {
           if (g.id === groupId) {
-            return {
+            const updated = {
               ...g,
               memberIds: g.memberIds.filter((id) => id !== personId),
               leaderIds: g.leaderIds.filter((id) => id !== personId),
               deputyLeaderIds: g.deputyLeaderIds?.filter((id) => id !== personId),
             };
+            updatedGroup = updated;
+            return updated;
           }
           return g;
         })
       );
+
+      if (updatedGroup) {
+        updateGroupInFirestore(groupId, {
+          memberIds: updatedGroup.memberIds,
+          leaderIds: updatedGroup.leaderIds,
+          deputyLeaderIds: updatedGroup.deputyLeaderIds,
+        }).catch((err) => {
+          console.error("Failed to sync removed group member to Firestore:", err);
+        });
+      }
+
       return { success: true };
     },
     []
@@ -631,6 +853,9 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           return t;
         })
       );
+      updateTaskInFirestore(taskId, updates).catch((err) => {
+        console.error("Failed to update task in Firestore:", err);
+      });
       return { success: true };
     },
     []
@@ -668,6 +893,10 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       };
 
       setTasks((prev) => [...prev, newTask]);
+      saveTaskToFirestore(newTask).catch((err) => {
+        console.error("Failed to save task to Firestore:", err);
+      });
+
       return { success: true, task: newTask };
     },
     []
@@ -678,6 +907,9 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     (taskId: string): { success: boolean; error?: string } => {
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
       setAssignments((prev) => prev.filter((a) => a.taskId !== taskId));
+      deleteTaskFromFirestore(taskId).catch((err) => {
+        console.error("Failed to delete task from Firestore:", err);
+      });
       return { success: true };
     },
     []
@@ -771,6 +1003,10 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       };
 
       setGroupMessages((prev) => [...prev, newMessage]);
+      saveGroupMessageToFirestore(newMessage).catch((err) => {
+        console.error("Failed to save message to Firestore:", err);
+      });
+
       return { success: true, message: newMessage };
     },
     [currentUser, groups]
@@ -790,6 +1026,10 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
 
       setGroupMessages((prev) => prev.filter((m) => m.id !== messageId));
+      deleteGroupMessageFromFirestore(messageId).catch((err) => {
+        console.error("Failed to delete message from Firestore:", err);
+      });
+
       return { success: true };
     },
     [groupMessages, currentUser.id]
@@ -799,6 +1039,7 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     (groupId: string, personId?: string, forceState?: boolean): { success: boolean; enabled: boolean } => {
       const targetPersonId = personId || currentUser.id;
       let newEnabled = true;
+      let updatedPreferences: Record<string, boolean> | undefined;
 
       setGroups((prev) =>
         prev.map((g) => {
@@ -806,17 +1047,25 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             const currentPrefs = g.notificationPreferences || {};
             const currentVal = currentPrefs[targetPersonId] ?? true;
             newEnabled = forceState !== undefined ? forceState : !currentVal;
+            const nextPrefs = {
+              ...currentPrefs,
+              [targetPersonId]: newEnabled,
+            };
+            updatedPreferences = nextPrefs;
             return {
               ...g,
-              notificationPreferences: {
-                ...currentPrefs,
-                [targetPersonId]: newEnabled,
-              },
+              notificationPreferences: nextPrefs,
             };
           }
           return g;
         })
       );
+
+      if (updatedPreferences) {
+        updateGroupInFirestore(groupId, { notificationPreferences: updatedPreferences }).catch((err) => {
+          console.error("Failed to sync notification preferences to Firestore:", err);
+        });
+      }
 
       return { success: true, enabled: newEnabled };
     },
@@ -901,6 +1150,10 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         invitationSentAt: data.sendInvitationImmediately ? new Date().toISOString() : undefined,
       };
       setGatherings((prev) => [...prev, newGathering]);
+      saveGatheringToFirestore(newGathering).catch((err) => {
+        console.error("Failed to save gathering to Firestore:", err);
+      });
+
       return { success: true, gathering: newGathering };
     },
     [groups]
@@ -924,6 +1177,10 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (!updatedGathering) {
         return { success: false, error: "Samling ikke funnet" };
       }
+      updateGatheringInFirestore(gatheringId, updates).catch((err) => {
+        console.error("Failed to update gathering in Firestore:", err);
+      });
+
       return { success: true, gathering: updatedGathering };
     },
     []
@@ -932,23 +1189,34 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const deleteGathering = useCallback((gatheringId: string): { success: boolean; error?: string } => {
     setGatherings((prev) => prev.filter((g) => g.id !== gatheringId));
     setAttendances((prev) => prev.filter((a) => a.gatheringId !== gatheringId));
+    deleteGatheringFromFirestore(gatheringId).catch((err) => {
+      console.error("Failed to delete gathering from Firestore:", err);
+    });
     return { success: true };
   }, []);
 
   const sendGatheringInvitation = useCallback(
     (gatheringId: string): { success: boolean; error?: string } => {
+      const nowIso = new Date().toISOString();
       setGatherings((prev) =>
         prev.map((g) => {
           if (g.id === gatheringId) {
             return {
               ...g,
               invitationSent: true,
-              invitationSentAt: new Date().toISOString(),
+              invitationSentAt: nowIso,
             };
           }
           return g;
         })
       );
+      updateGatheringInFirestore(gatheringId, {
+        invitationSent: true,
+        invitationSentAt: nowIso,
+      }).catch((err) => {
+        console.error("Failed to update invitation status in Firestore:", err);
+      });
+
       return { success: true };
     },
     []
@@ -960,17 +1228,20 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       personId: string,
       status: "attending" | "declined"
     ): Promise<{ success: boolean; error?: string }> => {
+      let targetAtt: GatheringAttendance | null = null;
       setAttendances((prev) => {
         const existingIndex = prev.findIndex(
           (a) => a.gatheringId === gatheringId && a.personId === personId
         );
         if (existingIndex >= 0) {
           const updated = [...prev];
-          updated[existingIndex] = {
+          const att: GatheringAttendance = {
             ...updated[existingIndex],
             status,
             updatedAt: new Date().toISOString(),
           };
+          updated[existingIndex] = att;
+          targetAtt = att;
           return updated;
         } else {
           const newAtt: GatheringAttendance = {
@@ -980,9 +1251,17 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             status,
             updatedAt: new Date().toISOString(),
           };
+          targetAtt = newAtt;
           return [...prev, newAtt];
         }
       });
+
+      if (targetAtt) {
+        saveAttendanceToFirestore(targetAtt).catch((err) => {
+          console.error("Failed to save attendance to Firestore:", err);
+        });
+      }
+
       return { success: true };
     },
     []
@@ -990,6 +1269,7 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const contextValue = useMemo(
     () => ({
+      isFirestoreConnected,
       currentUser,
       allPersons: persons,
       currentUserId,
@@ -1047,6 +1327,7 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       respondToGathering,
     }),
     [
+      isFirestoreConnected,
       currentUser,
       persons,
       currentUserId,

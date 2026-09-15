@@ -8,7 +8,7 @@ import {
   parseIsoToDateAndTime,
   combineDateAndTimeToIso,
 } from "../hooks/useAppHooks";
-import { GroupCategory } from "../types";
+import { GroupCategory, MeetingSchedule } from "../types";
 import { StaffingBadge } from "../components/StaffingBadge";
 import { UserQuickSwitcherBar } from "../components/UserSwitcher";
 import {
@@ -105,6 +105,50 @@ export const AdminPage: React.FC = () => {
   const [newGroupName, setNewGroupName] = useState<string>("");
   const [newGroupCategory, setNewGroupCategory] = useState<GroupCategory>("tjenestegruppe");
   const [newGroupLeaderId, setNewGroupLeaderId] = useState<string>("");
+  const [newGroupDeputyLeaderId, setNewGroupDeputyLeaderId] = useState<string>("");
+  const [newGroupWeekday, setNewGroupWeekday] = useState<string>("Tirsdag");
+  const [newGroupTime, setNewGroupTime] = useState<string>("19:00");
+  const [newGroupFrequency, setNewGroupFrequency] = useState<"hver uke" | "annenhver uke" | "hver måned">("annenhver uke");
+
+  const handleCreateGroup = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newGroupName.trim();
+    if (!trimmed) {
+      showFeedback("Gruppenavn må fylles ut.", "error");
+      return;
+    }
+
+    const leaderIds = newGroupLeaderId ? [newGroupLeaderId] : [];
+    const deputyLeaderIds = newGroupDeputyLeaderId ? [newGroupDeputyLeaderId] : [];
+
+    const meetingSchedule: MeetingSchedule | undefined =
+      newGroupCategory === "husgruppe"
+        ? {
+            weekday: newGroupWeekday,
+            time: newGroupTime,
+            frequency: newGroupFrequency,
+          }
+        : undefined;
+
+    const res = createGroup({
+      name: trimmed,
+      category: newGroupCategory,
+      leaderIds,
+      deputyLeaderIds,
+      meetingSchedule,
+    });
+
+    if (res.success && res.group) {
+      showFeedback(`Gruppen «${res.group.name}» ble opprettet!`);
+      setNewGroupName("");
+      setNewGroupCategory("tjenestegruppe");
+      setNewGroupLeaderId("");
+      setNewGroupDeputyLeaderId("");
+      setShowAddGroupForm(false);
+    } else {
+      showFeedback(res.error || "Kunne ikke opprette gruppe.", "error");
+    }
+  };
 
   // New Person Form States
   const [showAddPersonForm, setShowAddPersonForm] = useState<boolean>(false);
@@ -392,13 +436,203 @@ export const AdminPage: React.FC = () => {
         {activeTab === "grupper" && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Grupper & administrasjon
-              </h3>
-              <span className="text-[11px] text-slate-400 font-medium">
-                {filteredAdminGroups.length} av {adminGroups.length} grupper
-              </span>
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Grupper & administrasjon
+                </h3>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  {filteredAdminGroups.length} av {adminGroups.length} grupper
+                </span>
+              </div>
+              <button
+                type="button"
+                id="btn-toggle-add-group"
+                onClick={() => setShowAddGroupForm((prev) => !prev)}
+                className="w-7 h-7 flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-xs transition-colors cursor-pointer shrink-0"
+                title="Ny gruppe"
+                aria-label="Ny gruppe"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
             </div>
+
+            {/* Skjema for ny gruppe */}
+            {showAddGroupForm && (
+              <form
+                onSubmit={handleCreateGroup}
+                id="form-add-group"
+                className="p-3.5 bg-indigo-50/50 rounded-2xl border border-indigo-200/80 space-y-3 shadow-xs animate-in fade-in duration-150"
+              >
+                <div className="flex items-center justify-between border-b border-indigo-100 pb-1.5">
+                  <span className="text-xs font-bold text-indigo-900 flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-indigo-700" />
+                    Opprett ny gruppe
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddGroupForm(false)}
+                    className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <div>
+                    <label
+                      htmlFor="input-new-group-name"
+                      className="text-[11px] font-bold text-slate-700 block mb-0.5"
+                    >
+                      Gruppenavn <span className="text-red-500">*</span>:
+                    </label>
+                    <input
+                      type="text"
+                      id="input-new-group-name"
+                      value={newGroupName}
+                      onChange={(e) => setNewGroupName(e.target.value)}
+                      placeholder="F.eks. Lyd og bilde, Kaféteam, Husgruppe Sentrum..."
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                      required
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label
+                        htmlFor="select-new-group-category"
+                        className="text-[11px] font-semibold text-slate-700 block mb-0.5"
+                      >
+                        Gruppetype:
+                      </label>
+                      <select
+                        id="select-new-group-category"
+                        value={newGroupCategory}
+                        onChange={(e) => setNewGroupCategory(e.target.value as GroupCategory)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                      >
+                        <option value="tjenestegruppe">Tjenestegruppe</option>
+                        <option value="husgruppe">Husfellesskap</option>
+                        <option value="strategigruppe">Strategigruppe</option>
+                        <option value="ledergruppe">Ledergruppe</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="select-new-group-leader"
+                        className="text-[11px] font-semibold text-slate-700 block mb-0.5"
+                      >
+                        Gruppeleder:
+                      </label>
+                      <select
+                        id="select-new-group-leader"
+                        value={newGroupLeaderId}
+                        onChange={(e) => setNewGroupLeaderId(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                      >
+                        <option value="">-- Velg gruppeleder (valgfritt) --</option>
+                        {adminPersons.map(({ person }) => (
+                          <option key={person.id} value={person.id}>
+                            {person.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="select-new-group-deputy"
+                      className="text-[11px] font-semibold text-slate-700 block mb-0.5"
+                    >
+                      Nestleder:
+                    </label>
+                    <select
+                      id="select-new-group-deputy"
+                      value={newGroupDeputyLeaderId}
+                      onChange={(e) => setNewGroupDeputyLeaderId(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                    >
+                      <option value="">-- Velg nestleder (valgfritt) --</option>
+                      {adminPersons
+                        .filter(({ person }) => person.id !== newGroupLeaderId)
+                        .map(({ person }) => (
+                          <option key={person.id} value={person.id}>
+                            {person.name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  {newGroupCategory === "husgruppe" && (
+                    <div className="p-2.5 bg-emerald-50/70 border border-emerald-200/60 rounded-xl space-y-2">
+                      <span className="text-[11px] font-bold text-emerald-900 block">
+                        Møtetidspunkt for husfellesskap (valgfritt):
+                      </span>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-[10px] font-medium text-emerald-800 block mb-0.5">
+                            Ukedag:
+                          </label>
+                          <select
+                            value={newGroupWeekday}
+                            onChange={(e) => setNewGroupWeekday(e.target.value)}
+                            className="w-full px-2 py-1 bg-white border border-emerald-300 rounded-lg text-xs"
+                          >
+                            {["Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag", "Søndag"].map((day) => (
+                              <option key={day} value={day}>{day}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-medium text-emerald-800 block mb-0.5">
+                            Klokkeslett:
+                          </label>
+                          <input
+                            type="time"
+                            value={newGroupTime}
+                            onChange={(e) => setNewGroupTime(e.target.value)}
+                            className="w-full px-2 py-1 bg-white border border-emerald-300 rounded-lg text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-medium text-emerald-800 block mb-0.5">
+                            Frekvens:
+                          </label>
+                          <select
+                            value={newGroupFrequency}
+                            onChange={(e) => setNewGroupFrequency(e.target.value as any)}
+                            className="w-full px-2 py-1 bg-white border border-emerald-300 rounded-lg text-xs"
+                          >
+                            <option value="annenhver uke">Annenhver uke</option>
+                            <option value="hver uke">Hver uke</option>
+                            <option value="hver måned">Hver måned</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-end gap-2 pt-1 border-t border-indigo-100">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddGroupForm(false)}
+                      className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-800 rounded-lg cursor-pointer"
+                    >
+                      Avbryt
+                    </button>
+                    <button
+                      type="submit"
+                      id="btn-submit-new-group"
+                      className="px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg flex items-center gap-1 shadow-xs transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Opprett gruppe
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
 
             {/* Kategori-filter for admin: Alle | Husfellesskap | Tjenestegrupper */}
             <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl">
@@ -601,17 +835,23 @@ export const AdminPage: React.FC = () => {
         {activeTab === "personer" && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Personer ({adminPersons.length})
-              </h3>
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Personer ({adminPersons.length})
+                </h3>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  Medlemmer og frivillige
+                </span>
+              </div>
               <button
                 type="button"
                 id="btn-toggle-add-person"
                 onClick={() => setShowAddPersonForm((prev) => !prev)}
-                className="px-2.5 py-1 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-1 shadow-xs transition-colors cursor-pointer"
+                className="w-7 h-7 flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-xs transition-colors cursor-pointer shrink-0"
+                title="Ny person"
+                aria-label="Ny person"
               >
-                <UserPlus className="w-3.5 h-3.5" />
-                {showAddPersonForm ? "Lukk skjema" : "Legg til person"}
+                <Plus className="w-4 h-4" />
               </button>
             </div>
 
